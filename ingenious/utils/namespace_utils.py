@@ -293,6 +293,101 @@ class WorkflowDiscovery:
             logger.debug(f"Skipping {workflow_name} - not a valid workflow: {e}")
             return False
 
+    def _validate_custom_workflow(
+        self, flows_module_name: str, workflow_name: str
+    ) -> bool:
+        """
+        Validates a custom workflow. It looks inside the package
+        for any .py file (other than __init__.py) containing a valid ConversationFlow class.
+        """
+        try:
+            workflow_package_name = f"{flows_module_name}.{workflow_name}"
+            workflow_package = _importer.import_module(workflow_package_name)
+
+            if not hasattr(workflow_package, "__path__"):
+                return False
+
+            # Iterate through all modules (.py files) inside the package folder
+            for module_info in pkgutil.iter_modules(workflow_package.__path__):
+                if module_info.name == "__init__":
+                    continue
+
+                try:
+                    inner_module_name = f"{workflow_package_name}.{module_info.name}"
+                    inner_module = _importer.import_module(inner_module_name)
+
+                    if hasattr(inner_module, "ConversationFlow"):
+                        conversation_flow_class = getattr(
+                            inner_module, "ConversationFlow"
+                        )
+                        required_methods = [
+                            "get_conversation_response",
+                            "get_chat_response",
+                        ]
+                        if any(
+                            hasattr(conversation_flow_class, method)
+                            for method in required_methods
+                        ):
+                            logger.debug(
+                                f"Validated workflow '{workflow_name}' via module '{module_info.name}'"
+                            )
+                            return True  # Found a valid file, so the package is valid.
+                except Exception:
+                    continue
+
+            logger.debug(
+                f"No module with a valid ConversationFlow found in package '{workflow_name}'"
+            )
+            return False
+
+        except Exception as e:
+            logger.debug(f"Failed to validate package workflow '{workflow_name}': {e}")
+            return False
+
+    def discover_custom_workflows(self) -> Dict[str, Any]:
+        """
+        Discovers all custom workflows focusing on custom namespaces.
+
+        Returns:
+            A dict containing:
+            - `discovered_from`: The relative path to the `conversation_flows` directory.
+            - `workflows`: The list of discovered workflow names.
+        """
+        workflow_names = []
+        custom_namespaces = get_namespaces()[:2]  # Only check custom locations
+        working_dir = Path(os.getcwd())  # Use current working directory as base
+
+        discovered_from = None
+
+        for namespace in custom_namespaces:
+            try:
+                flows_module_name = (
+                    f"{namespace}.services.chat_services.multi_agent.conversation_flows"
+                )
+                flows_package = _importer.import_module(flows_module_name)
+
+                if hasattr(flows_package, "__path__"):
+                    # Compute the relative path to `conversation_flows`
+                    if not discovered_from:
+                        discovered_from = str(
+                            Path(flows_package.__path__[0]).relative_to(working_dir)
+                        )
+
+                    # Collect workflow names
+                    for module_info in pkgutil.iter_modules(flows_package.__path__):
+                        if module_info.ispkg:  # Only packages count as workflows
+                            if self._validate_custom_workflow(
+                                flows_module_name, module_info.name
+                            ):
+                                workflow_names.append(module_info.name)
+            except Exception:
+                continue
+
+        return {
+            "discovered_from": discovered_from,
+            "workflows": sorted(workflow_names),
+        }
+
     def get_workflow_metadata(self, workflow_name: str) -> Dict[str, Any]:
         """
         Get metadata for a specific workflow.
@@ -375,6 +470,11 @@ _workflow_discovery = WorkflowDiscovery()
 def discover_workflows(force_refresh: bool = False) -> List[str]:
     """Discover all available workflows."""
     return _workflow_discovery.discover_workflows(force_refresh)
+
+
+def discover_custom_workflows() -> List[str]:
+    """Discover all available custom workflows."""
+    return _workflow_discovery.discover_custom_workflows()
 
 
 def get_workflow_metadata(workflow_name: str) -> Dict[str, Any]:
