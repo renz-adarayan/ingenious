@@ -123,25 +123,8 @@ async def get_custom_workflow_schema(
             },
         }
 
-        # Create JSONResponse with explicit connection handling headers
-        response = JSONResponse(content=response_data)
-
-        # Add headers to prevent connection issues
-        response.headers["Connection"] = "close"
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
-
-        # Add CORS headers explicitly for custom UI compatibility
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Methods"] = (
-            "GET, POST, PUT, DELETE, OPTIONS"
-        )
-        response.headers["Access-Control-Allow-Headers"] = (
-            "Content-Type, Authorization, X-Requested-With"
-        )
-
-        return response
+        # Return JSONResponse (headers handled by middleware)
+        return JSONResponse(content=response_data)
 
     except HTTPException:
         raise
