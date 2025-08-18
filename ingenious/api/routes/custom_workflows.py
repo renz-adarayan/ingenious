@@ -1,7 +1,7 @@
 import inspect
 import pkgutil
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -140,7 +140,7 @@ async def get_custom_workflow_schema(
 
 
 def transform_schemas_for_alpine(
-    schemas: Dict[str, Any], model_classes: Dict[str, BaseModel]
+    schemas: Dict[str, Any], model_classes: Dict[str, type[BaseModel]]
 ) -> Dict[str, Any]:
     """
     Transform Pydantic JSON schemas into Alpine.js-friendly format with UI metadata.
@@ -191,7 +191,9 @@ def transform_schemas_for_alpine(
 
 
 def transform_field_for_alpine(
-    field_name: str, field_schema: Dict[str, Any], model_class: BaseModel = None
+    field_name: str,
+    field_schema: Dict[str, Any],
+    model_class: type[BaseModel] | None = None,
 ) -> Dict[str, Any]:
     """
     Transform individual field schema for Alpine.js with UI hints.
@@ -373,7 +375,7 @@ def transform_definition_for_alpine(
     }
 
 
-def extract_discriminator_info(schema: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def extract_discriminator_info(schema: Dict[str, Any]) -> Dict[str, Any] | None:
     """Extract discriminator information for union types."""
     if "discriminator" in schema:
         return schema["discriminator"]
