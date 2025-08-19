@@ -1,5 +1,6 @@
 import inspect
 import pkgutil
+import re
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -386,3 +387,124 @@ def extract_discriminator_info(schema: Dict[str, Any]) -> Dict[str, Any] | None:
         return {"property_name": "type", "mapping": {title.lower(): title}}
 
     return None
+
+
+@router.get(
+    "/custom-workflows/agents/{custom_workflow_name}/", response_model=Dict[str, Any]
+)
+async def get_custom_workflow_agents(custom_workflow_name: str) -> Dict[str, Any]:
+    """
+    Retrieves agent information by parsing the agent.py file of the specified custom workflow.
+    This approach uses source code inspection to avoid runtime execution.
+    """
+    try:
+        normalized_workflow_name = normalize_workflow_name(custom_workflow_name)
+        agent_module_path = f"models.{normalized_workflow_name}.agent"
+        models_dir_rel_path = f"models/{normalized_workflow_name}"
+        models_path = get_path_from_namespace_with_fallback(models_dir_rel_path)
+
+        if not models_path or not models_path.is_dir():
+            raise HTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=f"Models directory for workflow '{custom_workflow_name}' not found.",
+            )
+
+        agent_file_path = models_path / "agent.py"
+        if not agent_file_path.is_file():
+            raise HTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=f"Agent file not found for workflow '{custom_workflow_name}'.",
+            )
+
+        try:
+            # Import the module to get access to the class structure
+            agent_module = import_module_with_fallback(agent_module_path)
+
+            if not hasattr(agent_module, "ProjectAgents"):
+                raise HTTPException(
+                    status_code=HTTP_404_NOT_FOUND,
+                    detail=f"ProjectAgents class not found in agent.py for workflow '{custom_workflow_name}'.",
+                )
+
+            project_agents_class = getattr(agent_module, "ProjectAgents")
+
+            # Instantiation is needed to access the method for inspection,
+            # but the method itself is not called.
+            project_agents_instance = project_agents_class()
+
+            agents_list = []
+            discovery_method = "unknown"
+
+            # Directly parse the source code of the Get_Project_Agents method
+            source = inspect.getsource(project_agents_instance.Get_Project_Agents)
+
+            # Parse agent definitions from source code using a detailed regex
+            agent_pattern = r'Agent\s*\(\s*agent_name\s*=\s*["\']([^"\']+)["\'].*?agent_model_name\s*=\s*["\']([^"\']+)["\'].*?agent_display_name\s*=\s*["\']([^"\']+)["\'].*?agent_description\s*=\s*["\']([^"\']+)["\'].*?agent_type\s*=\s*["\']([^"\']+)["\'].*?log_to_prompt_tuner\s*=\s*([^,\s)]+).*?return_in_response\s*=\s*([^,\s)]+)'
+            matches = re.findall(agent_pattern, source, re.DOTALL)
+
+            if matches:
+                discovery_method = "source_code_parsing"
+                for match in matches:
+                    (
+                        agent_name,
+                        model_name,
+                        display_name,
+                        description,
+                        agent_type,
+                        _,
+                        _,
+                    ) = match
+
+                    agents_list.append(
+                        {
+                            "agent_name": agent_name.strip(),
+                            "agent_model_name": model_name.strip(),
+                            "agent_display_name": display_name.strip(),
+                            "agent_description": description.strip(),
+                            "agent_type": agent_type.strip(),
+                        }
+                    )
+            else:
+                # Final fallback if no agents can be parsed
+                discovery_method = "unparsable"
+                agents_list.append(
+                    {
+                        "agent_name": "unknown",
+                        "agent_description": "Agent definitions exist but could not be parsed.",
+                    }
+                )
+
+            return {
+                "workflow_name": custom_workflow_name,
+                "normalized_workflow_name": normalized_workflow_name,
+                "discovered_from": discovery_method,
+                "agent_count": len(agents_list),
+                "agents": agents_list,
+            }
+
+        except ImportError as e:
+            logger.error(f"Failed to import agent module {agent_module_path}: {e}")
+            raise HTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=f"Could not import agent module for workflow '{custom_workflow_name}'. {str(e)}",
+            )
+        except Exception as e:
+            logger.error(
+                f"Error processing agents for workflow '{custom_workflow_name}': {e}"
+            )
+            raise HTTPException(
+                status_code=HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error processing agents for workflow '{custom_workflow_name}': {str(e)}",
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"An unexpected error occurred while retrieving agents for '{custom_workflow_name}': {e}",
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred while retrieving the workflow agents.",
+        )
