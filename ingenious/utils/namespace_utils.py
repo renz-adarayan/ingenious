@@ -346,7 +346,7 @@ class WorkflowDiscovery:
 
     def discover_custom_workflows(self) -> Dict[str, Any]:
         """
-        Discovers all custom workflows focusing on custom namespaces.
+        Discovers all template workflows from the 'ingenious_extensions_template' namespace.
 
         Returns:
             A dict containing:
@@ -354,34 +354,37 @@ class WorkflowDiscovery:
             - `workflows`: The list of discovered workflow names.
         """
         workflow_names = []
-        custom_namespaces = get_namespaces()[:2]  # Only check custom locations
+        namespace = "ingenious.ingenious_extensions_template"
         working_dir = Path(os.getcwd())  # Use current working directory as base
 
         discovered_from = None
 
-        for namespace in custom_namespaces:
-            try:
-                flows_module_name = (
-                    f"{namespace}.services.chat_services.multi_agent.conversation_flows"
-                )
-                flows_package = _importer.import_module(flows_module_name)
+        try:
+            flows_module_name = (
+                f"{namespace}.services.chat_services.multi_agent.conversation_flows"
+            )
+            flows_package = _importer.import_module(flows_module_name)
 
-                if hasattr(flows_package, "__path__"):
-                    # Compute the relative path to `conversation_flows`
-                    if not discovered_from:
-                        discovered_from = str(
-                            Path(flows_package.__path__[0]).relative_to(working_dir)
-                        )
+            if hasattr(flows_package, "__path__"):
+                # Compute the relative path to `conversation_flows`
+                if not discovered_from:
+                    try:
+                        package_path = Path(flows_package.__path__[0])
+                        discovered_from = str(package_path.relative_to(working_dir))
+                    except ValueError:
+                        # Fallback to absolute path if not relative to CWD
+                        discovered_from = str(Path(flows_package.__path__[0]))
 
-                    # Collect workflow names
-                    for module_info in pkgutil.iter_modules(flows_package.__path__):
-                        if module_info.ispkg:  # Only packages count as workflows
-                            if self._validate_custom_workflow(
-                                flows_module_name, module_info.name
-                            ):
-                                workflow_names.append(module_info.name)
-            except Exception:
-                continue
+                # Collect workflow names
+                for module_info in pkgutil.iter_modules(flows_package.__path__):
+                    if module_info.ispkg:  # Only packages count as workflows
+                        if self._validate_custom_workflow(
+                            flows_module_name, module_info.name
+                        ):
+                            workflow_names.append(module_info.name)
+        except Exception:
+            # Silently pass if the namespace or path doesn't exist
+            pass
 
         return {
             "discovered_from": discovered_from,
