@@ -1,13 +1,39 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Optional, Union
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Union
 
-from azure.core.credentials import AzureKeyCredential, TokenCredential
-from azure.identity import (
-    ClientSecretCredential,
-    DefaultAzureCredential,
-    ManagedIdentityCredential,
-)
+# AzureKeyCredential is lightweight; still guard it to be safe
+try:
+    from azure.core.credentials import AzureKeyCredential  # type: ignore[missing-import]
+except Exception:  # pragma: no cover - fallback for environments w/o azure-core
+    class AzureKeyCredential:  # minimal fallback sentinel
+        def __init__(self, key: str) -> None:
+            self.key = key
 
+# TokenCredential / identity types: type-only to avoid hard dependency at import time
+if TYPE_CHECKING:
+    from azure.core.credentials import TokenCredential  # type: ignore[missing-import]
+    from azure.identity import (  # type: ignore[missing-import]
+        ClientSecretCredential,
+        DefaultAzureCredential,
+        ManagedIdentityCredential,
+        get_bearer_token_provider,
+    )
+else:
+    # Runtime sentinels so attribute access is explicit and predictable
+    class _TokenCredentialSentinel:  # pragma: no cover
+        pass
+
+    TokenCredential = _TokenCredentialSentinel  # type: ignore[misc, assignment]
+
+    # Names are present for static references; actual usage must import lazily in methods.
+    ClientSecretCredential = DefaultAzureCredential = ManagedIdentityCredential = None  # type: ignore[assignment]
+    def get_bearer_token_provider(*_args, **_kwargs):  # type: ignore[assignment]
+        raise ImportError(
+            "azure-identity is not installed. Install with: pip install azure-identity"
+        )
+    
 from ingenious.common.enums import AuthenticationMethod
 from ingenious.config.auth_config import AzureAuthConfig
 

@@ -1,4 +1,5 @@
-from typing import List, Optional
+from typing import List, Optional, Any
+from pydantic_core import core_schema
 
 from pydantic import BaseModel, Field, RootModel
 
@@ -6,7 +7,7 @@ from ingenious.common.enums import AuthenticationMethod
 from ingenious.config.auth_config import AzureAuthConfig
 
 
-class ModelConfig(AzureAuthConfig):
+class ModelConfig(AzureAuthConfig, BaseModel):
     model: str
     base_url: str
     deployment: str = ""
@@ -14,20 +15,20 @@ class ModelConfig(AzureAuthConfig):
     deployment: str = ""
 
 
-class ChatHistoryConfig(AzureAuthConfig):
+class ChatHistoryConfig(AzureAuthConfig, BaseModel): 
     database_connection_string: str = ""
 
 
-class AzureSqlConfig(AzureAuthConfig):
+class AzureSqlConfig(AzureAuthConfig, BaseModel): 
     database_connection_string: str = ""
 
 
-class CosmosConfig(AzureAuthConfig):
+class CosmosConfig(AzureAuthConfig, BaseModel): 
     uri: str = Field(..., description="Azure Cosmos DB URI")
     database_name: str = Field(..., description="Azure Cosmos DB database name")
 
 
-class AzureSearchConfig(AzureAuthConfig):
+class AzureSearchConfig(AzureAuthConfig, BaseModel): 
     service: str = "default"
     key: str = ""
 
@@ -61,7 +62,7 @@ class LoggingConfig(BaseModel):
     pass
 
 
-class FileStorageContainer(AzureAuthConfig):
+class FileStorageContainer(AzureAuthConfig, BaseModel):
     url: str = Field("", description="File Storage SAS URL")
     token: str = Field("", description="File Storage SAS Token")
 
