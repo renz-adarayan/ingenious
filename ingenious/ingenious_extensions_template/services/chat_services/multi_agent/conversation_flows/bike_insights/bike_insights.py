@@ -14,8 +14,10 @@ from autogen_core import (
 from autogen_core.tools import FunctionTool
 
 # Custom class import from ingenious_extensions
-from ingenious.ingenious_extensions_template.models.agent import ProjectAgents
-from ingenious.ingenious_extensions_template.models.bikes import RootModel
+from ingenious.ingenious_extensions_template.models.bike_insights.agent import (
+    ProjectAgents,
+)
+from ingenious.ingenious_extensions_template.models.bike_insights.bikes import RootModel
 from ingenious.models.ag_agents import (
     RelayAgent,
     RoutedAssistantAgent,
