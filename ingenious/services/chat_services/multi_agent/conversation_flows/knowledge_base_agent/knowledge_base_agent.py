@@ -1,24 +1,16 @@
 import logging
 import os
 import uuid
-from typing import AsyncIterator
+from typing import Any, AsyncIterator, cast
 
 from autogen_agentchat.agents import AssistantAgent
 from autogen_core import EVENT_LOGGER_NAME, CancellationToken
 from autogen_core.tools import FunctionTool
 
-from ingenious.common.utils import create_aoai_chat_completion_client_from_config
+from ingenious.client.azure import AzureClientFactory
 from ingenious.models.agent import LLMUsageTracker
 from ingenious.models.chat import ChatRequest, ChatResponse, ChatResponseChunk
 from ingenious.services.chat_services.multi_agent.service import IConversationFlow
-
-try:
-    from azure.core.credentials import AzureKeyCredential
-    from azure.search.documents import SearchClient
-
-    AZURE_SEARCH_AVAILABLE = True
-except ImportError:
-    AZURE_SEARCH_AVAILABLE = False
 
 
 class ConversationFlow(IConversationFlow):
@@ -69,17 +61,15 @@ class ConversationFlow(IConversationFlow):
                 logger.warning(f"Failed to retrieve thread memory: {e}")
 
         # Create the model client
-        model_client = create_aoai_chat_completion_client_from_config(model_config)
+        model_client = AzureClientFactory.create_openai_chat_completion_client(
+            model_config
+        )
 
         # Check if Azure Search is configured
         use_azure_search = (
             hasattr(self._config, "azure_search_services")
             and self._config.azure_search_services
             and len(self._config.azure_search_services) > 0
-            and AZURE_SEARCH_AVAILABLE
-            and self._config.azure_search_services[0].endpoint
-            and self._config.azure_search_services[0].key
-            and self._config.azure_search_services[0].key != "mock-search-key-12345"
         )
 
         if use_azure_search:
@@ -89,6 +79,7 @@ class ConversationFlow(IConversationFlow):
             context = f"Knowledge base search assistant using {search_backend} for finding information."
         else:
             # Use local ChromaDB
+            search_config = None
             search_backend = "local ChromaDB"
             context = f"Knowledge base search assistant using {search_backend} for finding information."
 
@@ -99,10 +90,10 @@ class ConversationFlow(IConversationFlow):
                 if use_azure_search:
                     # Use Azure AI Search
                     try:
-                        search_client = SearchClient(
-                            endpoint=search_config.endpoint,
-                            index_name="test-index",  # Use default index for now
-                            credential=AzureKeyCredential(search_config.key),
+                        assert search_config is not None
+                        search_client = AzureClientFactory.create_search_client(
+                            search_config=cast(Any, search_config),
+                            index_name="test-index",
                         )
 
                         # Perform search
@@ -360,7 +351,9 @@ TERMINATE your response when the task is complete.
                     logger.warning(f"Failed to retrieve thread memory: {e}")
 
             # Create the model client
-            model_client = create_aoai_chat_completion_client_from_config(model_config)
+            model_client = AzureClientFactory.create_openai_chat_completion_client(
+                model_config
+            )
 
             # Send initial chunk indicating start of processing
             yield ChatResponseChunk(
@@ -370,56 +363,59 @@ TERMINATE your response when the task is complete.
                 content="Searching knowledge base...",
                 is_final=False,
             )
-
             # Set up search functionality (same as non-streaming for now)
             use_azure_search = (
                 hasattr(self._config, "azure_search_services")
                 and self._config.azure_search_services
                 and len(self._config.azure_search_services) > 0
-                and AZURE_SEARCH_AVAILABLE
-                and self._config.azure_search_services[0].endpoint
-                and self._config.azure_search_services[0].key
-                and self._config.azure_search_services[0].key != "mock-search-key-12345"
             )
 
             if use_azure_search:
                 search_config = self._config.azure_search_services[0]
                 search_backend = "Azure AI Search"
             else:
+                search_config = None
+                search_backend = "local ChromaDB"
                 search_backend = "local ChromaDB"
 
             # Create search tool (abbreviated for brevity - would use same implementation)
             def search_tool(search_query: str) -> str:
-                """Search the knowledge base for information."""
                 try:
                     if use_azure_search:
-                        # Azure Search implementation (same as non-streaming)
-                        search_client = SearchClient(
-                            endpoint=search_config.endpoint,
-                            index_name=search_config.index_name,
-                            credential=AzureKeyCredential(search_config.key),
-                        )
-                        results = search_client.search(
-                            search_text=search_query, top=5, include_total_count=True
-                        )
-                        search_results = []
-                        for result in results:
-                            content = result.get("content", "")
-                            if content:
-                                search_results.append(content)
-
-                        if search_results:
-                            return (
-                                "Found relevant information from Azure AI Search:\n\n"
-                                + "\n\n".join(search_results)
+                        # Azure Search implementation using AzureClientFactory
+                        try:
+                            assert search_config is not None
+                            search_client = AzureClientFactory.create_search_client(
+                                search_config=cast(Any, search_config),
+                                index_name="test-index",
                             )
-                        else:
-                            return f"No relevant information found in Azure AI Search for query: {search_query}"
+                            results = search_client.search(
+                                search_text=search_query,
+                                top=5,
+                                include_total_count=True,
+                            )
+                            search_results = []
+                            for result in results:
+                                content = result.get("content", "") or str(result)
+                                if content:
+                                    search_results.append(content)
+                                    search_results.append(content)
+
+                            if search_results:
+                                return (
+                                    "Found relevant information from Azure AI Search:\n\n"
+                                    + "\n\n".join(search_results)
+                                )
+                            else:
+                                return f"No relevant information found in Azure AI Search for query: {search_query}"
+                        except Exception as e:
+                            return f"Azure Search error: {str(e)}. Ensure the search index exists and contains documents."
                     else:
                         # ChromaDB implementation would go here (abbreviated)
                         return f"ChromaDB search results for: {search_query}"
 
                 except Exception as e:
+                    return f"Search error: {str(e)}"
                     return f"Search error: {str(e)}"
 
             search_function_tool = FunctionTool(

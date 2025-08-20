@@ -120,11 +120,7 @@ def get_conditional_security(
     request: Request, config: IngeniousSettings = Depends(get_config)
 ) -> str:
     """Get authenticated user - returns 'anonymous' when auth is disabled."""
-    if not config.web_configuration.authentication.enable:
-        logger.warning(
-            "Authentication is disabled. This is not recommended for production use."
-        )
-        return "anonymous"
+    # Import here to avoid circular dependency
+    from ingenious.services.auth_dependencies import get_auth_user
 
-    # For now, just return anonymous - full auth implementation would go here
-    return "anonymous"
+    return get_auth_user(request, config)

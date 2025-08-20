@@ -3,12 +3,13 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from ingenious.common.enums import AuthenticationMethod
+from ingenious.config.auth_config import AzureAuthConfig
 from ingenious.models import config as config_models
 from ingenious.models import config_ns as config_ns_models
 from ingenious.models import profile as profile_models
 
 
-class ChatHistoryConfig(config_ns_models.ChatHistoryConfig):
+class ChatHistoryConfig(config_ns_models.ChatHistoryConfig, AzureAuthConfig):
     database_connection_string: str = Field(
         "", description="Connection string for the database. Only used for azuresql"
     )
@@ -26,44 +27,48 @@ class ChatHistoryConfig(config_ns_models.ChatHistoryConfig):
             memory_path=config.memory_path,
         )
 
+        # Initialize the AzureAuthConfig part
+        AzureAuthConfig.__init__(
+            self,
+            authentication_method=profile.authentication_method,
+            client_id=profile.client_id if profile.client_id else None,
+            client_secret=profile.client_secret if profile.client_secret else None,
+            tenant_id=profile.tenant_id if profile.tenant_id else None,
+            api_key=profile.api_key if profile.api_key else None,
+        )
 
-class ModelConfig(config_ns_models.ModelConfig):
-    api_key: str = ""
-    base_url: str
-    deployment: str = ""
-    client_id: str = ""
-    client_secret: str = ""
-    tenant_id: str = ""
-    authentication_method: AuthenticationMethod = Field(
-        AuthenticationMethod.DEFAULT_CREDENTIAL,
-        description="OpenAI SAS Authentication Method",
-    )
+
+class ModelConfig(config_ns_models.ModelConfig, AzureAuthConfig):
+    base_url: str = ""
 
     def __init__(
         self, config: config_ns_models.ModelConfig, profile: profile_models.ModelConfig
     ):
         # Get deployment and api_version from profile if available, otherwise from config
-        deployment = getattr(profile, "deployment", "") or getattr(
-            config, "deployment", ""
-        )
-        api_version = getattr(profile, "api_version", "") or getattr(
-            config, "api_version", ""
-        )
+        deployment = profile.deployment or config.deployment
+        api_version = profile.api_version or config.api_version
 
-        super().__init__(
+        # Initialize the config_ns_models.ModelConfig part
+        config_ns_models.ModelConfig.__init__(
+            self,
             model=config.model,
             api_type=config.api_type,
             api_version=api_version,
             deployment=deployment,
         )
 
-        # Set additional fields from profile that aren't in the parent class
+        # Initialize the AzureAuthConfig part
+        AzureAuthConfig.__init__(
+            self,
+            authentication_method=profile.authentication_method,
+            client_id=profile.client_id if profile.client_id else None,
+            client_secret=profile.client_secret if profile.client_secret else None,
+            tenant_id=profile.tenant_id if profile.tenant_id else None,
+            api_key=profile.api_key if profile.api_key else None,
+        )
+
+        # Set additional fields from profile that aren't in either parent class
         self.base_url = profile.base_url
-        self.api_key = profile.api_key
-        self.client_id = profile.client_id
-        self.client_secret = profile.client_secret
-        self.tenant_id = profile.tenant_id
-        self.authentication_method = profile.authentication_method
 
 
 class ChatServiceConfig(config_ns_models.ChatServiceConfig):
@@ -95,7 +100,7 @@ class LoggingConfig(config_ns_models.LoggingConfig):
         )
 
 
-class AzureSearchConfig(config_ns_models.AzureSearchConfig):
+class AzureSearchConfig(config_ns_models.AzureSearchConfig, AzureAuthConfig):
     key: str = ""
 
     def __init__(
@@ -103,13 +108,26 @@ class AzureSearchConfig(config_ns_models.AzureSearchConfig):
         config: config_ns_models.AzureSearchConfig,
         profile: profile_models.AzureSearchConfig,
     ):
-        super().__init__(service=config.service, endpoint=config.endpoint)
+        # Initialize the config_ns_models.AzureSearchConfig part
+        config_ns_models.AzureSearchConfig.__init__(
+            self, service=config.service, endpoint=config.endpoint
+        )
+
+        # Initialize the AzureAuthConfig part
+        AzureAuthConfig.__init__(
+            self,
+            authentication_method=AuthenticationMethod.TOKEN,  # Search services typically use API keys
+            client_id=None,
+            client_secret=None,
+            tenant_id=None,
+            api_key=profile.key if profile.key else None,
+        )
 
         # Set additional fields from profile
         self.key = profile.key
 
 
-class AzureSqlConfig(config_ns_models.AzureSqlConfig):
+class AzureSqlConfig(config_ns_models.AzureSqlConfig, AzureAuthConfig):
     database_connection_string: str = Field(
         "", description="azure SQL Connection string"
     )
@@ -119,10 +137,44 @@ class AzureSqlConfig(config_ns_models.AzureSqlConfig):
         config: config_ns_models.AzureSqlConfig,
         profile: profile_models.AzureSqlConfig,
     ):
-        super().__init__(
+        # Initialize the config_ns_models.AzureSqlConfig part
+        config_ns_models.AzureSqlConfig.__init__(
+            self,
             table_name=config.table_name,
             database_name=config.database_name,
             database_connection_string=profile.database_connection_string,
+        )
+
+        # Initialize the AzureAuthConfig part
+        AzureAuthConfig.__init__(
+            self,
+            authentication_method=AuthenticationMethod.DEFAULT_CREDENTIAL,  # SQL typically uses connection strings or default credential
+            client_id=None,
+            client_secret=None,
+            tenant_id=None,
+            api_key=None,
+        )
+
+
+class CosmosConfig(config_ns_models.CosmosConfig, AzureAuthConfig):
+    def __init__(
+        self,
+        config: config_ns_models.CosmosConfig,
+        profile: profile_models.CosmosConfig,
+    ):
+        # Initialize the config_ns_models.CosmosConfig part
+        config_ns_models.CosmosConfig.__init__(
+            self, uri=config.uri, database_name=config.database_name
+        )
+
+        # Initialize the AzureAuthConfig part
+        AzureAuthConfig.__init__(
+            self,
+            authentication_method=profile.authentication_method,
+            client_id=profile.client_id if profile.client_id else None,
+            client_secret=profile.client_secret if profile.client_secret else None,
+            tenant_id=profile.tenant_id if profile.tenant_id else None,
+            api_key=profile.api_key if profile.api_key else None,
         )
 
 
@@ -163,31 +215,38 @@ class LocaldbConfig(config_ns_models.LocaldbConfig):
         )
 
 
-class FileStorageContainer(config_ns_models.FileStorageContainer):
+class FileStorageContainer(config_ns_models.FileStorageContainer, AzureAuthConfig):
     url: str = Field("", description="File Storage SAS URL")
-    client_id: str = Field("", description="File Storage SAS Client ID")
     token: str = Field("", description="File Storage SAS Token")
-    authentication_method: AuthenticationMethod = Field(
-        AuthenticationMethod.DEFAULT_CREDENTIAL,
-        description="File Storage SAS Authentication Method",
-    )
 
     def __init__(
         self,
         config: config_ns_models.FileStorageContainer,
         profile: profile_models.FileStorageContainer,
     ):
-        super().__init__(
+        # Initialize the config_ns_models.FileStorageContainer part
+        config_ns_models.FileStorageContainer.__init__(
+            self,
             enable=config.enable,
             storage_type=config.storage_type,
             container_name=config.container_name,
             path=config.path,
             add_sub_folders=config.add_sub_folders,
         )
+
+        # Initialize the AzureAuthConfig part
+        AzureAuthConfig.__init__(
+            self,
+            authentication_method=profile.authentication_method,
+            client_id=profile.client_id if profile.client_id else None,
+            client_secret=None,  # File storage doesn't typically use client secrets
+            tenant_id=None,  # File storage doesn't typically use tenant ID
+            api_key=profile.token if profile.token else None,
+        )
+
+        # Set additional fields
         self.url = profile.url
         self.token = profile.token
-        self.client_id = profile.client_id
-        self.authentication_method = AuthenticationMethod(profile.authentication_method)
 
 
 class FileStorage(config_ns_models.FileStorage):

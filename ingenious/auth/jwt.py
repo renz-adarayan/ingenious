@@ -10,14 +10,57 @@ from ingenious.core.structured_logging import get_logger
 
 logger = get_logger(__name__)
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY") or "your-secret-key-change-this-in-production"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(
-    os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES") or "1440"
-)  # 24 hours
-REFRESH_TOKEN_EXPIRE_DAYS = int(
-    os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS") or "7"
-)  # 7 days
+
+# Get configuration with fallbacks
+def _get_jwt_config():
+    """Get JWT configuration from settings or environment variables."""
+    try:
+        from ingenious.config.config import get_config
+
+        config = get_config()
+        auth_config = config.web_configuration.authentication
+
+        secret_key = (
+            auth_config.jwt_secret_key
+            or os.getenv("INGENIOUS_JWT_SECRET_KEY")
+            or os.getenv("JWT_SECRET_KEY")
+            or "your-secret-key-change-this-in-production"
+        )
+
+        algorithm = (
+            auth_config.jwt_algorithm or os.getenv("INGENIOUS_JWT_ALGORITHM") or "HS256"
+        )
+
+        access_token_expire = (
+            auth_config.jwt_access_token_expire_minutes
+            or int(os.getenv("INGENIOUS_JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "0"))
+            or int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "0"))
+            or 1440
+        )
+
+        refresh_token_expire = (
+            auth_config.jwt_refresh_token_expire_days
+            or int(os.getenv("INGENIOUS_JWT_REFRESH_TOKEN_EXPIRE_DAYS", "0"))
+            or int(os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "0"))
+            or 7
+        )
+
+        return secret_key, algorithm, access_token_expire, refresh_token_expire
+    except Exception:
+        # Fallback if config is not available
+        return (
+            os.getenv("INGENIOUS_JWT_SECRET_KEY")
+            or os.getenv("JWT_SECRET_KEY")
+            or "your-secret-key-change-this-in-production",
+            os.getenv("INGENIOUS_JWT_ALGORITHM") or "HS256",
+            int(os.getenv("INGENIOUS_JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "1440")),
+            int(os.getenv("INGENIOUS_JWT_REFRESH_TOKEN_EXPIRE_DAYS", "7")),
+        )
+
+
+SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, REFRESH_TOKEN_EXPIRE_DAYS = (
+    _get_jwt_config()
+)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

@@ -6,7 +6,7 @@ from autogen_agentchat.messages import TextMessage
 from autogen_core import EVENT_LOGGER_NAME, CancellationToken
 
 import ingenious.config.config as config
-from ingenious.common.utils import create_aoai_chat_completion_client_from_settings
+from ingenious.client.azure import AzureClientFactory
 from ingenious.models.agent import LLMUsageTracker
 from ingenious.models.chat import ChatRequest
 
@@ -67,7 +67,9 @@ class ConversationFlow:
                 )
 
         # Create the Azure OpenAI client using the provided model configuration
-        model_client = create_aoai_chat_completion_client_from_settings(model_config)
+        model_client = AzureClientFactory.create_openai_chat_completion_client(
+            model_config
+        )
 
         # Create classification system prompt with memory context
         classification_system_prompt = f"""

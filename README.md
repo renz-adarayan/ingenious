@@ -1,6 +1,6 @@
 # Insight Ingenious
 
-[![Version](https://img.shields.io/badge/version-0.2.2-blue.svg)](https://github.com/Insight-Services-APAC/ingenious)
+[![Version](https://img.shields.io/badge/version-0.2.4-blue.svg)](https://github.com/Insight-Services-APAC/ingenious)
 [![Python](https://img.shields.io/badge/python-3.13+-green.svg)](https://www.python.org/downloads/)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Insight-Services-APAC/ingenious)
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
@@ -16,6 +16,17 @@ Get up and running in 5 minutes with Azure OpenAI!
 - Azure OpenAI API credentials
 - [uv package manager](https://docs.astral.sh/uv/)
 
+### AI-Assisted Set Up (give this prompt to your preferred coding agent)
+
+**WARNING: Audit ALL Azure CLI commands!**
+
+```markdown
+Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingenious/guides/complete-azure-deployment/).
+
+- Deploy only required resources at minimal cost.
+- Use a new resource group: **<your-new-rg-name>**.
+- Azure CLI access is available.
+```
 ### 5-Minute Setup
 
 1. **Install and Initialize**:

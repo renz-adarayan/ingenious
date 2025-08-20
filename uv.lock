@@ -1345,12 +1345,13 @@ wheels = [
 
 [[package]]
 name = "ingenious"
-version = "0.2.2"
+version = "0.2.3"
 source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
     { name = "autogen-agentchat" },
     { name = "autogen-ext" },
+    { name = "azure-cosmos" },
     { name = "azure-identity" },
     { name = "azure-keyvault-secrets" },
     { name = "azure-search-documents" },
@@ -1570,6 +1571,7 @@ requires-dist = [
     { name = "autogen-ext", extras = ["openai"], marker = "extra == 'ai'", specifier = "==0.5.7" },
     { name = "azure-ai-documentintelligence", marker = "extra == 'document-processing'", specifier = "==1.0.2" },
     { name = "azure-core", marker = "extra == 'azure'", specifier = "==1.34.0" },
+    { name = "azure-cosmos", specifier = ">=4.9.0" },
     { name = "azure-cosmos", marker = "extra == 'azure'", specifier = "==4.9.0" },
     { name = "azure-identity", specifier = ">=1.17.1" },
     { name = "azure-identity", marker = "extra == 'azure'", specifier = "==1.17.1" },

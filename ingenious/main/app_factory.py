@@ -71,6 +71,14 @@ class FastAgentAPI:
             allow_headers=["*"],
         )
 
+        # Add authentication middleware if configured
+        if hasattr(
+            self.config.web_configuration.authentication, "enable_global_middleware"
+        ):
+            from ingenious.auth.middleware import setup_auth_middleware
+
+            setup_auth_middleware(self.app, self.config)
+
     def _setup_routes(self) -> None:
         """Register all application routes."""
         RouteManager.register_all_routes(self.app, self.config)

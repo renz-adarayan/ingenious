@@ -1,19 +1,15 @@
 import re
 from typing import AsyncIterator
 
-from azure.identity import (
-    ClientSecretCredential,
-    DefaultAzureCredential,
-    ManagedIdentityCredential,
-    get_bearer_token_provider,
-)
-from openai import NOT_GIVEN, AzureOpenAI, BadRequestError
+from openai import NOT_GIVEN, BadRequestError
 from openai.types.chat import (
     ChatCompletionMessage,
     ChatCompletionMessageParam,
+    ChatCompletionToolChoiceOptionParam,
     ChatCompletionToolParam,
 )
 
+from ingenious.client.azure import AzureClientFactory
 from ingenious.common.enums import AuthenticationMethod
 from ingenious.core.structured_logging import get_logger
 from ingenious.errors.content_filter_error import ContentFilterError
@@ -35,111 +31,18 @@ class OpenAIService:
         client_secret: str = "",
         tenant_id: str = "",
     ):
-        # Use model name as deployment if not provided
-        if not deployment:
-            deployment = open_ai_model
-
-        if authentication_method == AuthenticationMethod.DEFAULT_CREDENTIAL:
-            try:
-                token_provider = get_bearer_token_provider(
-                    DefaultAzureCredential(),
-                    "https://cognitiveservices.azure.com/.default",
-                )
-
-                self.client = AzureOpenAI(
-                    azure_endpoint=azure_endpoint,
-                    api_version=api_version,
-                    azure_ad_token_provider=token_provider,
-                    azure_deployment=deployment,
-                )
-
-                logger.info(
-                    "AzureOpenAI client initialized successfully with custom token provider"
-                )
-            except Exception as e:
-                logger.error(
-                    f"Failed to initialize AzureOpenAI with DefaultAzureCredential: {e}"
-                )
-
-                logger.error(
-                    "Available authentication methods: Azure CLI, Managed Identity, Environment Variables"
-                )
-
-                logger.error(
-                    "Make sure you're logged in with 'az login' or have proper environment variables set"
-                )
-                raise ValueError(f"Azure authentication failed: {e}")
-        elif authentication_method == AuthenticationMethod.TOKEN:
-            self.client = AzureOpenAI(
-                azure_endpoint=azure_endpoint,
-                api_key=api_key,
-                api_version=api_version,
-                azure_deployment=deployment,
-            )
-        elif authentication_method == AuthenticationMethod.CLIENT_ID_AND_SECRET:
-            # Use Client Secret Credential for authentication
-            if not client_id:
-                raise ValueError(
-                    "client_id is required when using CLIENT_ID_AND_SECRET authentication"
-                )
-            if not client_secret:
-                raise ValueError(
-                    "client_secret is required when using CLIENT_ID_AND_SECRET authentication"
-                )
-
-            # Handle tenant_id: use provided value or fallback to environment variable
-            effective_tenant_id = tenant_id
-            if not effective_tenant_id:
-                import os
-
-                effective_tenant_id = os.getenv("AZURE_TENANT_ID")
-
-            if not effective_tenant_id:
-                raise ValueError(
-                    "tenant_id is required when using CLIENT_ID_AND_SECRET authentication. "
-                    "Provide tenant_id in configuration or set AZURE_TENANT_ID environment variable"
-                )
-
-            credential = ClientSecretCredential(
-                tenant_id=effective_tenant_id,
-                client_id=client_id,
-                client_secret=client_secret,
-            )
-            token_provider = get_bearer_token_provider(
-                credential, "https://cognitiveservices.azure.com/.default"
-            )
-            self.client = AzureOpenAI(
-                azure_endpoint=azure_endpoint,
-                api_version=api_version,
-                azure_ad_token_provider=token_provider,
-                azure_deployment=deployment,
-            )
-            logger.info(
-                "AzureOpenAI client initialized successfully with CLIENT_ID_AND_SECRET authentication"
-            )
-        elif authentication_method == AuthenticationMethod.MSI:
-            # Use Managed Service Identity for authentication
-            credential = (
-                ManagedIdentityCredential(client_id=client_id)
-                if client_id
-                else ManagedIdentityCredential()
-            )
-            token_provider = get_bearer_token_provider(
-                credential, "https://cognitiveservices.azure.com/.default"
-            )
-            self.client = AzureOpenAI(
-                azure_endpoint=azure_endpoint,
-                api_version=api_version,
-                azure_ad_token_provider=token_provider,
-                azure_deployment=deployment,
-            )
-            logger.info(
-                "AzureOpenAI client initialized successfully with MSI authentication"
-            )
-        else:
-            raise ValueError(
-                f"Unsupported authentication mode: {authentication_method}"
-            )
+        # Use the centralized Azure client factory for consistent validation and authentication
+        self.client = AzureClientFactory.create_openai_client_from_params(
+            model=open_ai_model,
+            base_url=azure_endpoint,
+            api_version=api_version,
+            deployment=deployment,
+            api_key=api_key,
+            authentication_method=authentication_method,
+            client_id=client_id,
+            client_secret=client_secret,
+            tenant_id=tenant_id,
+        )
 
         self.model = open_ai_model
 
@@ -147,7 +50,7 @@ class OpenAIService:
         self,
         messages: list[ChatCompletionMessageParam],
         tools: list[ChatCompletionToolParam] | None = None,
-        tool_choice: str | dict[str, object] | None = None,
+        tool_choice: ChatCompletionToolChoiceOptionParam | None = None,
         json_mode=False,
     ) -> ChatCompletionMessage:
         logger.debug(
@@ -158,11 +61,18 @@ class OpenAIService:
             json_mode=json_mode,
         )
         try:
+            # Handle tool_choice parameter properly
+            effective_tool_choice = (
+                tool_choice
+                if tool_choice is not None
+                else ("auto" if tools else NOT_GIVEN)
+            )
+
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 tools=tools or NOT_GIVEN,
-                tool_choice=tool_choice or ("auto" if tools else NOT_GIVEN),
+                tool_choice=effective_tool_choice,
                 response_format={"type": "json_object"} if json_mode else NOT_GIVEN,
                 temperature=0.2,
             )
@@ -224,7 +134,7 @@ class OpenAIService:
         self,
         messages: list[ChatCompletionMessageParam],
         tools: list[ChatCompletionToolParam] | None = None,
-        tool_choice: str | dict[str, object] | None = None,
+        tool_choice: ChatCompletionToolChoiceOptionParam | None = None,
         json_mode=False,
     ) -> AsyncIterator[str]:
         """Generate streaming response from OpenAI API.
@@ -239,11 +149,18 @@ class OpenAIService:
             json_mode=json_mode,
         )
         try:
+            # Handle tool_choice parameter properly
+            effective_tool_choice = (
+                tool_choice
+                if tool_choice is not None
+                else ("auto" if tools else NOT_GIVEN)
+            )
+
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 tools=tools or NOT_GIVEN,
-                tool_choice=tool_choice or ("auto" if tools else NOT_GIVEN),
+                tool_choice=effective_tool_choice,
                 response_format={"type": "json_object"} if json_mode else NOT_GIVEN,
                 temperature=0.2,
                 stream=True,
