@@ -86,7 +86,7 @@ class TestGetCustomWorkflowSchema:
     """Test suite for get_custom_workflow_schema function."""
 
     @pytest.fixture
-    def mock_pydantic_model(self):
+    def mock_pydantic_model(self) -> type[BaseModel]:
         """Create a mock Pydantic model for testing."""
 
         class TestModel(BaseModel):
@@ -101,7 +101,7 @@ class TestGetCustomWorkflowSchema:
         return TestModel
 
     @pytest.fixture
-    def mock_request(self):
+    def mock_request(self) -> Mock:
         """Create a mock FastAPI request object."""
         from fastapi import Request
 
@@ -117,14 +117,14 @@ class TestGetCustomWorkflowSchema:
     @patch("ingenious.api.routes.custom_workflows.inspect.getmembers")
     async def test_get_custom_workflow_schema_success(
         self,
-        mock_getmembers,
-        mock_import,
-        mock_iter_modules,
-        mock_get_path,
-        mock_normalize,
-        mock_request,
-        mock_pydantic_model,
-    ):
+        mock_getmembers: Mock,
+        mock_import: Mock,
+        mock_iter_modules: Mock,
+        mock_get_path: Mock,
+        mock_normalize: Mock,
+        mock_request: Mock,
+        mock_pydantic_model: type[BaseModel],
+    ) -> None:
         """Test successful schema retrieval."""
         # Setup mocks
         mock_normalize.return_value = "test_workflow"
@@ -161,13 +161,13 @@ class TestGetCustomWorkflowSchema:
     @patch("ingenious.api.routes.custom_workflows.inspect.getmembers")
     async def test_get_custom_workflow_schema_multiple_models(
         self,
-        mock_getmembers,
-        mock_import,
-        mock_iter_modules,
-        mock_get_path,
-        mock_normalize,
-        mock_request,
-    ):
+        mock_getmembers: Mock,
+        mock_import: Mock,
+        mock_iter_modules: Mock,
+        mock_get_path: Mock,
+        mock_normalize: Mock,
+        mock_request: Mock,
+    ) -> None:
         """Test schema retrieval with multiple Pydantic models."""
         mock_normalize.return_value = "test_workflow"
         mock_path = Mock()

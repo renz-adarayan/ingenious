@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from ingenious.core.structured_logging import get_logger
@@ -167,8 +166,10 @@ async def get_custom_workflow_schema(
                 module = import_module_with_fallback(module_import_path)
                 for name, obj in inspect.getmembers(module, inspect.isclass):
                     if issubclass(obj, BaseModel) and obj is not BaseModel:
-                        pydantic_models[name] = obj.model_json_schema()
-                        model_classes[name] = obj
+                        schema = obj.model_json_schema()
+                        if schema is not None:
+                            pydantic_models[name] = schema
+                            model_classes[name] = obj
             except (ImportError, AttributeError) as e:
                 logger.error(
                     f"Error processing schema module {module_import_path}: {e}"
@@ -201,8 +202,8 @@ async def get_custom_workflow_schema(
             },
         }
 
-        # Return JSONResponse (headers handled by middleware)
-        return JSONResponse(content=response_data)
+        # Return dict instead of JSONResponse for correct type annotation
+        return response_data
 
     except HTTPException:
         raise
@@ -456,7 +457,12 @@ def transform_definition_for_alpine(
 def extract_discriminator_info(schema: Dict[str, Any]) -> Dict[str, Any] | None:
     """Extract discriminator information for union types."""
     if "discriminator" in schema:
-        return schema["discriminator"]
+        disc = schema["discriminator"]
+        if isinstance(disc, dict):
+            # Ensure return type is Dict[str, Any]
+            return disc
+        else:
+            return {"property_name": str(disc)}
 
     # Try to infer discriminator from class hierarchy
     title = schema.get("title", "")
