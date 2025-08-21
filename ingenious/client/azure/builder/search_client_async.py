@@ -109,85 +109,61 @@ class AzureSearchAsyncClientBuilder:
         Resolve endpoint and credentials from a flexible config mapping/object.
 
         Recognized fields:
-          - endpoint (preferred), search_endpoint, base_url  -> service URL
-          - Prefer AAD token if any of:
-              * tenant_id + client_id + client_secret  (ClientSecretCredential)
-              * managed_identity_client_id              (ManagedIdentityCredential)
-              * explicit preference via prefer_token / use_token truthy flag
-          - Key aliases: search_key, key, api_key      -> AzureKeyCredential
+        - endpoint (preferred), search_endpoint, base_url, or service -> service URL
+        - Prefer AAD token if any of:
+            * tenant_id + client_id + client_secret  (ClientSecretCredential)
+            * managed_identity_client_id              (ManagedIdentityCredential)
+            * explicit preference via prefer_token / use_token truthy flag
+        - Key aliases: search_key, key, api_key      -> AzureKeyCredential
         """
         cfg = config or {}
 
+        # ---- Endpoint resolution (add 'service' fallback for parity with sync) ----
         endpoint = _get(cfg, "endpoint", "search_endpoint", "base_url")
         if not endpoint:
+            service = _get(cfg, "service")
+            if service:
+                endpoint = f"https://{service}.search.windows.net"
+
+        if not endpoint:
             raise ValueError(
-                "Azure Search endpoint is required (use 'endpoint' or 'search_endpoint')."
+                "Azure Search endpoint is required (use 'endpoint' or 'search_endpoint', "
+                "or provide 'service' to derive it)."
             )
 
-        # Token over key precedence
+        # ---- (unchanged) credential resolution below ----
         tenant_id = _get(cfg, "tenant_id")
         client_id = _get(cfg, "client_id")
         client_secret = _to_plain_secret(_get(cfg, "client_secret"))
         msi_client_id = _get(cfg, "managed_identity_client_id")
-
         key = _to_plain_secret(_get(cfg, "search_key", "key", "api_key"))
-
         prefer_token_flag = bool(_get(cfg, "prefer_token", "use_token") or False)
 
         cred: Union[AsyncTokenCredential, AzureKeyCredential, None] = None
-
-        # 1) Try explicit ClientSecretCredential (async)
         if tenant_id and client_id and client_secret:
-            try:
-                from azure.identity.aio import ClientSecretCredential  # type: ignore
-            except Exception as e:  # pragma: no cover - error path
-                raise ImportError(
-                    "azure-identity is required for AAD auth. Install with: pip install azure-identity"
-                ) from e
+            from azure.identity.aio import ClientSecretCredential  # type: ignore
             cred = ClientSecretCredential(
-                tenant_id=str(tenant_id),
-                client_id=str(client_id),
-                client_secret=str(client_secret),
+                tenant_id=str(tenant_id), client_id=str(client_id), client_secret=str(client_secret)
             )
-
-        # 2) Try ManagedIdentityCredential (async)
         elif msi_client_id:
-            try:
-                from azure.identity.aio import ManagedIdentityCredential  # type: ignore
-            except Exception as e:  # pragma: no cover - error path
-                raise ImportError(
-                    "azure-identity is required for Managed Identity auth. Install with: pip install azure-identity"
-                ) from e
+            from azure.identity.aio import ManagedIdentityCredential  # type: ignore
             cred = ManagedIdentityCredential(client_id=str(msi_client_id))
-
-        # 3) If token explicitly preferred or no key, try DefaultAzureCredential (async)
         elif prefer_token_flag or not key:
             try:
                 from azure.identity.aio import DefaultAzureCredential  # type: ignore
-            except Exception as e:  # pragma: no cover - error path
+            except Exception as e:  # pragma: no cover
                 if not key:
                     raise ImportError(
                         "azure-identity is required for token auth or provide 'search_key'."
                     ) from e
-                # Will fall back to key below
             else:
-                cred = DefaultAzureCredential(
-                    exclude_interactive_browser_credential=True
-                )
+                cred = DefaultAzureCredential(exclude_interactive_browser_credential=True)
 
-        # 4) Fall back to key
         if cred is None and key:
             cred = AzureKeyCredential(str(key))
 
-        # 5) Final fallback to DefaultAzureCredential if still nothing (ensures async cred)
         if cred is None:
-            try:
-                from azure.identity.aio import DefaultAzureCredential  # type: ignore
-            except Exception as e:  # pragma: no cover - error path
-                raise ImportError(
-                    "No valid credential could be created. Install 'azure-identity' "
-                    "or provide 'search_key' in config."
-                ) from e
+            from azure.identity.aio import DefaultAzureCredential  # type: ignore
             cred = DefaultAzureCredential(exclude_interactive_browser_credential=True)
 
         return cls(

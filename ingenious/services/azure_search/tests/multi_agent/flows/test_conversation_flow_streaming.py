@@ -166,10 +166,14 @@ def flow_fixture(
         """Factory function to create a mock client instance."""
         return _MockAsyncClient()
 
+    # The flow now uses AzureClientFactory.create_openai_chat_completion_client(...)
+    # Expose that method via a SimpleNamespace so the call site resolves.
     monkeypatch.setattr(
         kba,
-        "create_aoai_chat_completion_client_from_config",
-        MagicMock(side_effect=_mk_client),
+        "AzureClientFactory",
+        SimpleNamespace(
+            create_openai_chat_completion_client=MagicMock(side_effect=_mk_client)
+        ),
     )
 
     # --- Mock AssistantAgent.run_stream ---------------------------------------

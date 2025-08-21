@@ -7,7 +7,6 @@ priority order: request parameters override environment variables, which in
 turn override hardcoded defaults. It also validates fallback behavior for
 invalid or missing configuration values.
 """
-
 from __future__ import annotations
 
 import os
@@ -91,141 +90,185 @@ def test_non_numeric_and_non_positive_topk_values_are_ignored(
 
     assert flow._get_top_k("direct", ZeroReq()) == 3  # default
 
-
 @pytest.mark.asyncio
 async def test_invalid_kb_mode_coerces_to_direct(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
-    """Ensure an invalid KB_MODE environment variable falls back to 'direct' mode.
-
-    If the `KB_MODE` environment variable is set to an unsupported value,
-    the conversation flow should default to 'direct' mode and use its
-    corresponding `top_k` default (3), ensuring graceful degradation.
     """
-    # If KB_MODE invalid, direct-mode defaults are used (top_k=3).
+    Ensure an invalid KB_MODE coerces to 'direct' (top_k=3) AND that the Azure path
+    is actually taken (preflight succeeds) so the final response contains the
+    'Azure AI Search' prefix.
+
+    Why this test needed a fix:
+    ---------------------------
+    - The KB flow performs a strict preflight: `await client.get_document_count()`.
+    - In this test file we published fake `azure.*` modules into sys.modules (good),
+      but we did NOT guarantee that the KB module’s `make_search_client` returns
+      an instance of THAT fake async client.
+    - If a prior patch returns some other fake without `get_document_count`, preflight
+      raises, Azure path is skipped, and the flow drops to the Chroma path, causing
+      the assertion to fail.
+
+    What we add here:
+    -----------------
+    - Patch the KB module’s `make_search_client` (the **import site** used by the flow)
+      to build our fake async SearchClient type that implements `get_document_count()`.
+    - Clear policy env vars so nothing forces a local/non-Azure path.
+    """
+
+    # 1) Invalid KB_MODE so the flow must coerce to 'direct' (default top_k=3).
     os.environ["KB_MODE"] = "wEiRd"
 
-    # Provider stub captures top_k
+    # 2) Provider stub that captures the top_k the flow sends to Azure.
     prov_mod = types.ModuleType("ingenious.services.azure_search.provider")
     seen: Dict[str, Any] = {}
 
     class AzureSearchProvider:
-        """A stub for the AzureSearchProvider to capture the `top_k` value."""
+        """Fake Azure provider – records top_k and returns a canned doc."""
 
         def __init__(self, *a: Any, **k: Any) -> None:
-            """Initialize the mock provider, accepting any arguments."""
-            pass  # accept config
+            """Accept whatever constructor args the flow passes."""
+            pass
 
         async def retrieve(self, query: str, top_k: int = 99) -> List[Dict[str, str]]:
-            """Record the `top_k` value used in the call and return a mock result."""
+            """Record top_k and return one deterministic result."""
             seen["top_k"] = top_k
             return [{"id": "1", "title": "T", "snippet": "S", "content": "C"}]
 
         async def close(self) -> None:
-            """Perform no-op cleanup."""
+            """No-op close to match the real provider interface."""
             pass
 
     prov_mod.AzureSearchProvider = AzureSearchProvider
+
+    # 3) Publish minimal fake Azure SDK modules into sys.modules so imports in the flow
+    #    succeed and our preflight can *attempt* to use them.
     import types as _t
 
     class _Cred:
-        """A mock for AzureKeyCredential."""
-
+        """Fake AzureKeyCredential; we only store the key."""
         def __init__(self, k: str) -> None:
-            """Initialize with a key."""
             self.k = k
 
     class _Client:
-        """A mock for azure.search.documents.aio.SearchClient."""
-
+        """
+        Fake async SearchClient; implements the two async methods the KB preflight needs:
+          - get_document_count()
+          - close()
+        """
         def __init__(self, *, endpoint: str, index_name: str, credential: Any) -> None:
-            """Initialize the mock client."""
-            ...
+            # Match the real constructor signature for realism; no logic needed here.
+            self.endpoint = endpoint
+            self.index_name = index_name
+            self.credential = credential
 
         async def get_document_count(self) -> int:
-            """Return a mock document count."""
+            """Return a positive int so preflight 'passes'."""
             return 1
 
         async def close(self) -> None:
-            """Perform no-op cleanup."""
+            """No-op close to match real client surface."""
             pass
 
+    # Install fake 'azure.core.credentials' and 'azure.search.documents.aio'
     monkeypatch.setitem(
         sys.modules, "azure.core.credentials", _t.ModuleType("azure.core.credentials")
     )
-    sys.modules["azure.core.credentials"].AzureKeyCredential = _Cred
+    sys.modules["azure.core.credentials"].AzureKeyCredential = _Cred  # type: ignore[attr-defined]
+
     monkeypatch.setitem(
-        sys.modules,
-        "azure.search.documents.aio",
-        _t.ModuleType("azure.search.documents.aio"),
+        sys.modules, "azure.search.documents.aio", _t.ModuleType("azure.search.documents.aio")
     )
-    sys.modules["azure.search.documents.aio"].SearchClient = _Client
+    sys.modules["azure.search.documents.aio"].SearchClient = _Client  # type: ignore[attr-defined]
+
+    # 4) CRITICAL: Patch the KB module’s *imported* symbol `make_search_client` so that
+    #    the KB flow actually constructs OUR fake async client above. Patching the factory
+    #    module is NOT sufficient because the KB file imported the function by value.
+    def _make_fake_client_from_cfg(cfg: Any) -> _Client:
+        """
+        Build our fake async client using the stub config the KB preflight passes.
+        The stub exposes:
+          - search_endpoint
+          - search_index_name
+          - search_key (str or SecretStr)
+        """
+        # Unwrap SecretStr if present; tests may pass a plain str
+        key_obj = getattr(cfg, "search_key", "")
+        if hasattr(key_obj, "get_secret_value"):
+            try:
+                key = key_obj.get_secret_value()
+            except Exception:
+                key = ""
+        else:
+            key = key_obj or ""
+
+        return _Client(
+            endpoint=getattr(cfg, "search_endpoint"),
+            index_name=getattr(cfg, "search_index_name"),
+            credential=_Cred(str(key)),
+        )
+
+    # Patch the symbol where it is used by the flow.
+    monkeypatch.setattr(kb, "make_search_client", _make_fake_client_from_cfg, raising=True)
+
+    # 5) Make sure the Azure provider import is “available” to the flow so
+    #    `_is_azure_search_available()` returns True.
     monkeypatch.setitem(
         sys.modules, "ingenious.services.azure_search.provider", prov_mod
     )
 
-    # Minimal autogen + LLM tracker + client
+    # 6) Minimal autogen + LLM factories to satisfy unrelated imports/usage.
     core = _t.ModuleType("autogen_core")
     core.EVENT_LOGGER_NAME = "autogen"
 
     class CancellationToken:
-        """A mock CancellationToken."""
-
+        """Minimal token class; the flow only needs the symbol to exist."""
         ...
 
     core.CancellationToken = CancellationToken
     monkeypatch.setitem(sys.modules, "autogen_core", core)
     tools = _t.ModuleType("autogen_core.tools")
-    tools.FunctionTool = object
+    tools.FunctionTool = object  # not exercised in this test path
     monkeypatch.setitem(sys.modules, "autogen_core.tools", tools)
     ag = _t.ModuleType("autogen_agentchat.agents")
-    ag.AssistantAgent = object
+    ag.AssistantAgent = object  # not exercised in this test path
     monkeypatch.setitem(sys.modules, "autogen_agentchat.agents", ag)
 
     class DummyLLMClient:
-        """A mock LLM client with a no-op close method."""
-
+        """Tiny async LLM client with a no-op close() to satisfy flow cleanup."""
         async def close(self) -> None:
-            """Perform no-op cleanup."""
             pass
 
+    # The flow constructs a chat completion client; return our dummy async client.
     monkeypatch.setattr(
-        kb, "create_aoai_chat_completion_client_from_config", lambda _: DummyLLMClient()
+        kb,
+        "AzureClientFactory",
+        SimpleNamespace(create_openai_chat_completion_client=lambda _cfg: DummyLLMClient()),
+        raising=False,
     )
 
-    class Acc:
-        """A mock accumulator."""
+    # 7) Defensive: clear any policy env that might force local/Chroma.
+    #    The default policy in the flow is 'azure_only'; we want to exercise Azure, not local.
+    monkeypatch.delenv("KB_POLICY", raising=False)
+    monkeypatch.delenv("KB_FALLBACK_ON_EMPTY", raising=False)
 
-        def emit(self, r: Any) -> None:
-            """Perform a no-op emit."""
-            pass
-
-    import logging
-
-    class _H(logging.Handler):
-        """A mock logging handler."""
-
-        def emit(self, r: Any) -> None:
-            """Perform a no-op emit."""
-            pass
-
-    monkeypatch.setattr(kb, "LLMUsageTracker", _H, raising=False)
-
+    # 8) Build a flow instance with a minimal, valid Azure service configuration.
     flow: kb.ConversationFlow = kb.ConversationFlow.__new__(kb.ConversationFlow)
     flow._config = SimpleNamespace(
         models=[SimpleNamespace(model="gpt-4o")],
-        azure_search_services=[
-            SimpleNamespace(endpoint="https://s", key="k", index_name="idx")
-        ],
+        azure_search_services=[SimpleNamespace(endpoint="https://s", key="k", index_name="idx")],
     )
     flow._chat_service = None
     flow._memory_path = str(tmp_path)
-    # Provide default paths in case of any local fallback path execution
+
+    # Provide default local paths just in case logging touches them (not used here).
     flow._kb_path = os.path.join(str(tmp_path), "knowledge_base")
     flow._chroma_path = os.path.join(str(tmp_path), "chroma_db")
 
+    # 9) Execute the code under test with a real ChatRequest.
     from ingenious.models.chat import ChatRequest
+    resp = await flow.get_conversation_response(ChatRequest(user_prompt="q"))
 
-    resp: Any = await flow.get_conversation_response(ChatRequest(user_prompt="q"))
+    # 10) Assertions: Azure path used, and 'direct' default top_k=3 was applied.
     assert "Found relevant information from Azure AI Search" in resp.agent_response
-    assert seen.get("top_k") == 3  # direct default applies
+    assert seen.get("top_k") == 3

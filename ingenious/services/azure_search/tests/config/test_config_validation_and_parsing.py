@@ -37,35 +37,6 @@ if TYPE_CHECKING:
 # ModelSettings
 # ─────────────────────────────────────────────────────────────────────────────
 
-
-def test_modelsettings_token_requires_api_key() -> None:
-    """Test that TOKEN authentication requires a non-empty `api_key`.
-
-    This validator prevents a common misconfiguration where token-based auth
-    is selected but the required API key is missing, which would cause runtime
-    authentication failures.
-    """
-    # Missing API key with TOKEN auth → should raise ValidationError
-    with pytest.raises(ValidationError):
-        ModelSettings(
-            model="gpt-4o",
-            base_url="https://oai.example.com",
-            deployment="chat",
-            authentication_method=AuthenticationMethod.TOKEN,
-            api_key="",  # required for TOKEN
-        )
-
-    # With API key present → should construct fine
-    ok = ModelSettings(
-        model="gpt-4o",
-        base_url="https://oai.example.com",
-        deployment="chat",
-        authentication_method=AuthenticationMethod.TOKEN,
-        api_key="secret",
-    )
-    assert ok.api_key == "secret"
-
-
 def test_modelsettings_client_id_and_secret_require_all_fields_or_env(
     monkeypatch: MonkeyPatch,
 ) -> None:

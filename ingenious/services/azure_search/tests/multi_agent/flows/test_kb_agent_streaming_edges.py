@@ -78,8 +78,14 @@ def _patch_basics(monkeypatch: MonkeyPatch) -> Iterator[None]:
     monkeypatch.setitem(sys.modules, "autogen_agentchat.agents", agents)
 
     monkeypatch.setattr(kb, "LLMUsageTracker", AcceptingLogHandler, raising=False)
+    monkeypatch.setattr(kb, "LLMUsageTracker", AcceptingLogHandler, raising=False)
+    # Patch new client factory
     monkeypatch.setattr(
-        kb, "create_aoai_chat_completion_client_from_config", lambda _: DummyLLMClient()
+        kb,
+        "AzureClientFactory",
+        SimpleNamespace(
+            create_openai_chat_completion_client=lambda _cfg: DummyLLMClient()
+        ),
     )
     yield
 

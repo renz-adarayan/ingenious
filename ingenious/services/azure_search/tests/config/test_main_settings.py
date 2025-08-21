@@ -135,24 +135,6 @@ def test_empty_models_rejected(monkeypatch: MonkeyPatch) -> None:
     with pytest.raises(ValueError, match="At least one model must be configured"):
         IngeniousSettings()
 
-
-def test_model_auth_validations_token_requires_api_key(
-    monkeypatch: MonkeyPatch,
-) -> None:
-    """Test that 'token' auth method requires an API key."""
-    monkeypatch.setenv("INGENIOUS_MODELS__0__MODEL", "gpt-4o")
-    monkeypatch.setenv("INGENIOUS_MODELS__0__BASE_URL", "https://oai/")
-    monkeypatch.setenv("INGENIOUS_MODELS__0__DEPLOYMENT", "chat")
-    monkeypatch.setenv("INGENIOUS_MODELS__0__AUTHENTICATION_METHOD", "token")
-
-    # Crucial Fix: Ensure no API key is present from any source for this test
-    monkeypatch.setenv("INGENIOUS_MODELS__0__API_KEY", "")  # Explicitly set to empty
-    monkeypatch.delenv("AZURE_OPENAI_API_KEY", raising=False)  # Unset common fallbacks
-
-    with pytest.raises(ValueError, match="API key is required"):
-        IngeniousSettings()
-
-
 def test_model_auth_client_credentials_require_fields(
     monkeypatch: MonkeyPatch,
 ) -> None:

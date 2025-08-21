@@ -115,72 +115,139 @@ class MockAssistantAgent:
 
         return _gen()
 
-
 @pytest.fixture(autouse=True)
 def patch_tool_and_agent(monkeypatch: pytest.MonkeyPatch) -> None:
     """
-    Patches FunctionTool, AssistantAgent, and Azure SDK modules for all tests.
+    Patches FunctionTool, AssistantAgent, and installs a minimal fake Azure SDK.
+    ALSO patches the KB module's `make_search_client` so strict preflight
+    (`await client.get_document_count()`) *always* succeeds in tests.
 
-    This fixture ensures that tests run in an isolated environment by replacing
-    key external dependencies with lightweight shims and mocks. It also mocks
-    the necessary parts of the Azure SDK to prevent network calls during
-    preflight checks.
+    Why we patch `make_search_client` here:
+    ---------------------------------------
+    - The KB flow imported the function by value:
+          from ingenious.services.azure_search.client_init import make_search_client
+    - If another test earlier monkeypatched the factory, this module's imported
+      symbol may still point at a different fake that lacks `get_document_count`.
+    - By patching the *KB module's* symbol here, we guarantee preflight will
+      receive a client with the async methods we call (`get_document_count`, `close`).
     """
-    # Patch FunctionTool to our shim
+    # ------------------------------------------------------------------
+    # 1) Keep your existing patches for FunctionTool + AssistantAgent
+    # ------------------------------------------------------------------
     monkeypatch.setattr(
         "ingenious.services.chat_services.multi_agent.conversation_flows.knowledge_base_agent.knowledge_base_agent.FunctionTool",
         FunctionToolShim,
     )
-    # Patch AssistantAgent in the module where used
     monkeypatch.setattr(
         "ingenious.services.chat_services.multi_agent.conversation_flows.knowledge_base_agent.knowledge_base_agent.AssistantAgent",
         MockAssistantAgent,
     )
 
-    # Minimal Azure SDK surface used by KB preflight
+    # ------------------------------------------------------------------
+    # 2) Publish a minimal fake Azure SDK surface into sys.modules
+    #    so imports inside the KB module resolve during preflight.
+    #    We provide:
+    #      - azure.core.credentials.AzureKeyCredential
+    #      - azure.search.documents.aio.SearchClient (async methods!)
+    # ------------------------------------------------------------------
     import types
+    import sys
+    from typing import Any
 
+    # Fake AzureKeyCredential that simply stores the key (no real auth).
     core_creds = types.ModuleType("azure.core.credentials")
 
     class _Cred:
-        """Minimal mock for AzureKeyCredential."""
-
+        """Minimal mock for AzureKeyCredential (stores the key only)."""
         def __init__(self, key: str) -> None:
-            """Stores the key."""
             self.key = key
 
     core_creds.AzureKeyCredential = _Cred
 
+    # Fake async SearchClient that implements the two methods our preflight uses.
     aio = types.ModuleType("azure.search.documents.aio")
 
     class _Client:
-        """Minimal mock for SearchClient."""
-
+        """Minimal async mock for azure.search.documents.aio.SearchClient."""
         def __init__(self, *, endpoint: str, index_name: str, credential: Any) -> None:
-            """Initializes the mock client, performing no actions."""
-            pass
+            # Match real ctor signature for realism; logic not required.
+            self.endpoint = endpoint
+            self.index_name = index_name
+            self.credential = credential
 
         async def get_document_count(self) -> int:
-            """Simulates finding one document in the index."""
+            """
+            Return a deterministic positive value so preflight "passes".
+            If you need a failing preflight in a specific test, you can monkeypatch
+            this method there to raise (e.g., RuntimeError("401")).
+            """
             return 1
 
         async def close(self) -> None:
-            """Simulates closing the client connection."""
+            """Fake async close() to match real client surface."""
             pass
 
     aio.SearchClient = _Client
 
+    # Install the fake modules so the KB module's imports succeed.
     monkeypatch.setitem(sys.modules, "azure", types.ModuleType("azure"))
     monkeypatch.setitem(sys.modules, "azure.core", types.ModuleType("azure.core"))
     monkeypatch.setitem(sys.modules, "azure.core.credentials", core_creds)
     monkeypatch.setitem(sys.modules, "azure.search", types.ModuleType("azure.search"))
     monkeypatch.setitem(
-        sys.modules,
-        "azure.search.documents",
-        types.ModuleType("azure.search.documents"),
+        sys.modules, "azure.search.documents", types.ModuleType("azure.search.documents")
     )
     monkeypatch.setitem(sys.modules, "azure.search.documents.aio", aio)
 
+    # ------------------------------------------------------------------
+    # 3) Patch the *KB module's* `make_search_client` so that the KB flow
+    #    actually CONSTRUCTS our fake async client above during preflight.
+    #
+    #    IMPORTANT: We patch the import *site* used by the flow (the KB module),
+    #    not the factory module, because the KB file imported the function by value.
+    # ------------------------------------------------------------------
+    def _build_fake_client_from_cfg(cfg: Any) -> _Client:
+        """
+        The KB preflight passes a SimpleNamespace-like object with:
+          - search_endpoint
+          - search_index_name
+          - search_key (either a plain str or a SecretStr)
+        We unwrap SecretStr if present and return our fake async SearchClient.
+        """
+        # Extract endpoint/index from the stub config passed by preflight.
+        endpoint = getattr(cfg, "search_endpoint")
+        index_name = getattr(cfg, "search_index_name")
+
+        # SecretStr unwrap (production passes SecretStr; tests may pass a str).
+        key_obj = getattr(cfg, "search_key", "")
+        if hasattr(key_obj, "get_secret_value"):
+            try:
+                key = key_obj.get_secret_value()
+            except Exception:
+                key = ""  # Defensive fallback for weird test inputs
+        else:
+            key = key_obj or ""
+
+        # Return the fake async SearchClient our preflight expects.
+        return _Client(
+            endpoint=endpoint,
+            index_name=index_name,
+            credential=_Cred(str(key)),
+        )
+
+    # Patch the symbol where the KB module calls it.
+    monkeypatch.setattr(
+        "ingenious.services.chat_services.multi_agent.conversation_flows.knowledge_base_agent.knowledge_base_agent.make_search_client",
+        _build_fake_client_from_cfg,
+        raising=True,
+    )
+
+    # ------------------------------------------------------------------
+    # 4) Optional: clear policy env vars that might force local/Chroma.
+    #    (If a prior test left KB_POLICY=local_only, you'd always see local.)
+    # ------------------------------------------------------------------
+    monkeypatch.delenv("KB_POLICY", raising=False)
+    monkeypatch.delenv("KB_FALLBACK_ON_EMPTY", raising=False)
 
 @pytest.fixture
 def mock_model_client(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
@@ -192,9 +259,10 @@ def mock_model_client(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     """
     # Provide an object with an async close() we can assert against
     fake_client = SimpleNamespace(close=AsyncMock())
+    # Patch new client factory (module attribute AzureClientFactory with the method we call)
     monkeypatch.setattr(
-        "ingenious.services.chat_services.multi_agent.conversation_flows.knowledge_base_agent.knowledge_base_agent.create_aoai_chat_completion_client_from_config",
-        lambda _: fake_client,
+        "ingenious.services.chat_services.multi_agent.conversation_flows.knowledge_base_agent.knowledge_base_agent.AzureClientFactory",
+        SimpleNamespace(create_openai_chat_completion_client=lambda _cfg: fake_client),
     )
     return fake_client
 

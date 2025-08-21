@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 # Allow tests to monkeypatch either this symbol or the accessor.
 AzureClientFactory = None  # type: ignore
-__all__ = ["make_search_client", "make_async_openai_client"]
+__all__ = ["async_", "make_async_openai_client"]
 
 # Internal cache to avoid repeated imports; test can also patch this in place.
 _FACTORY_SINGLETON: Any | None = None
@@ -41,7 +41,6 @@ def make_search_client(cfg: "SearchConfig", **client_options: Any) -> "SearchCli
         },
         **client_options,
     )
-
 
 def make_async_openai_client(cfg: "SearchConfig", **client_options: Any) -> "AsyncAzureOpenAI":
     """Create the async Azure OpenAI client via AzureClientFactory.

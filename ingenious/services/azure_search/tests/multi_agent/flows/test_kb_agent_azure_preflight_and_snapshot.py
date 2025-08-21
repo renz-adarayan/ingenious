@@ -111,8 +111,13 @@ def _base(monkeypatch: MonkeyPatch) -> Iterator[None]:
 
     # If LLMUsageTracker does not exist in the module, allow injection
     monkeypatch.setattr(kb, "LLMUsageTracker", AcceptingLogHandler, raising=False)
+    # Patch new client factory
     monkeypatch.setattr(
-        kb, "create_aoai_chat_completion_client_from_config", lambda _: DummyLLMClient()
+        kb,
+        "AzureClientFactory",
+        SimpleNamespace(
+            create_openai_chat_completion_client=lambda _cfg: DummyLLMClient()
+        ),
     )
 
     for v in (

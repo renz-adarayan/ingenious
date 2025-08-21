@@ -106,18 +106,42 @@ async def test_kb_agent_azure_runtime_failure_falls_back_to_chroma(
     os.makedirs("/tmp/knowledge_base", exist_ok=True)
 
     with (
+        # --- your existing patches ---
         patch("azure.core.credentials.AzureKeyCredential", _Cred, create=True),
         patch("azure.search.documents.aio.SearchClient", _Client, create=True),
         patch(
             "ingenious.services.azure_search.provider.AzureSearchProvider",
             return_value=mock_provider_instance,
         ),
-        patch(
-            "chromadb.PersistentClient",
-            return_value=mock_chroma_client,
-        ),
+        patch("chromadb.PersistentClient", return_value=mock_chroma_client),
         patch.dict(os.environ, {"KB_POLICY": "prefer_azure"}, clear=False),
+
+        # --- NEW: patch the KB module’s imported symbol so preflight builds our _Client ---
+        patch(
+            # IMPORTANT: patch the symbol where it is USED (KB module), not the factory module.
+            "ingenious.services.chat_services.multi_agent.conversation_flows.knowledge_base_agent.knowledge_base_agent.make_search_client",
+            # We provide a small builder that adapts the KB preflight stub (SimpleNamespace)
+            # into our _Client. This guarantees the preflight call `await client.get_document_count()`
+            # finds the async method and succeeds in THIS test.
+            new=lambda cfg: _Client(
+                endpoint=getattr(cfg, "search_endpoint"),
+                index_name=getattr(cfg, "search_index_name"),
+                credential=_Cred(
+                    # Unwrap SecretStr if the stub used it; fall back to plain str otherwise
+                    getattr(cfg, "search_key").get_secret_value()
+                    if hasattr(getattr(cfg, "search_key"), "get_secret_value")
+                    else getattr(cfg, "search_key")
+                ),
+            ),
+            create=True,
+        ),
     ):
+        # With all patches active, the KB flow will:
+        # 1) pass preflight (our _Client has async get_document_count()),
+        # 2) attempt Azure (calls mock_provider_instance.retrieve(...) once),
+        # 3) our retrieve() raises RuntimeError(...) -> flow falls back to Chroma,
+        # 4) returns Chroma results and logs the fallback,
+        # 5) and your asserts on retrieve-call-count + Chroma output pass.
         result: str = await flow._search_knowledge_base(
             search_query="test query",
             use_azure_search=True,

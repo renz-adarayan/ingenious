@@ -333,44 +333,137 @@ def install_fake_chromadb(
     monkeypatch.setitem(sys.modules, "chromadb", chroma_mod)
 
 
-# CORRECTED FIXTURE
 @pytest.fixture
 def azure_sdk_compat(monkeypatch: pytest.MonkeyPatch) -> None:
     """
-    Correctly mock the Azure SDK by creating fake modules and injecting them
-    into sys.modules. This intercepts the 'from ... import ...' statements
-    inside the function under test, satisfying dependencies without requiring
-    the actual SDK to be installed.
+    Provide a fully-compatible, in-process fake Azure SDK *and*
+    ensure the KB module builds its SearchClient from that fake.
+
+    Why we do this:
+    ---------------
+    - The KB agent's preflight calls `await client.get_document_count()`.
+    - We don't want real cloud calls or the real SDK in tests.
+    - So we:
+      1) publish tiny fake `azure.*` modules into `sys.modules` so imports resolve;
+      2) patch the *KB module's* `make_search_client` to instantiate *our* fake
+         async `SearchClient`, guaranteeing it has the async methods the preflight calls.
+
+    Without step (2), some other fake (lacking `get_document_count`) can still be
+    returned by previous patches in the suite, causing the observed AttributeError.
     """
 
-    class _Cred:
+    import sys
+    import types
+    from typing import Any
+
+    # -----------------------------
+    # 1) Define minimal fake SDK
+    # -----------------------------
+
+    class _FakeAzureKeyCredential:
+        """
+        Fake stand-in for azure.core.credentials.AzureKeyCredential.
+        It simply stores the key; no real auth is performed.
+        """
         def __init__(self, key: str) -> None:
             self.key = key
 
-    class _Client:
+    class _FakeAsyncSearchClient:
+        """
+        Fake stand-in for azure.search.documents.aio.SearchClient that implements
+        exactly the async methods our KB preflight uses:
+          - get_document_count (async)
+          - close (async)
+        """
         def __init__(self, *, endpoint: str, index_name: str, credential: Any) -> None:
             self.endpoint = endpoint
             self.index_name = index_name
             self.credential = credential
+            self._closed = False
 
         async def get_document_count(self) -> int:
+            """
+            Return a deterministic positive value so preflight "succeeds".
+            If you need to simulate a failing preflight in some tests, modify
+            this to raise an exception (e.g., RuntimeError("401 Unauthorized")).
+            """
             return 1
 
         async def close(self) -> None:
-            pass
+            """Simulate the async close() on the real client."""
+            self._closed = True
 
-    # Create a fake 'azure.core.credentials' module
-    cred_mod = types.ModuleType("azure.core.credentials")
-    cred_mod.AzureKeyCredential = _Cred
-    # Inject it into sys.modules to intercept the import
-    monkeypatch.setitem(sys.modules, "azure.core.credentials", cred_mod)
+    # ---------------------------------------------------
+    # 2) Publish fake azure.* modules into sys.modules
+    #    so `from azure... import ...` resolves to these.
+    # ---------------------------------------------------
 
-    # Create a fake 'azure.search.documents.aio' module
-    search_mod = types.ModuleType("azure.search.documents.aio")
-    search_mod.SearchClient = _Client
-    # Inject it into sys.modules to intercept the import
-    monkeypatch.setitem(sys.modules, "azure.search.documents.aio", search_mod)
+    fake_credentials_mod = types.ModuleType("azure.core.credentials")
+    setattr(fake_credentials_mod, "AzureKeyCredential", _FakeAzureKeyCredential)
+    monkeypatch.setitem(sys.modules, "azure.core.credentials", fake_credentials_mod)
 
+    fake_aio_mod = types.ModuleType("azure.search.documents.aio")
+    setattr(fake_aio_mod, "SearchClient", _FakeAsyncSearchClient)
+    monkeypatch.setitem(sys.modules, "azure.search.documents.aio", fake_aio_mod)
+
+    # -----------------------------------------------------------------
+    # 3) Patch the *KB module's* make_search_client symbol so that the
+    #    KB preflight *always* constructs our fake async client above.
+    #
+    #    IMPORTANT: We patch the symbol where it is USED (the KB module),
+    #    not the factory module, because the KB file imported the symbol
+    #    by value:
+    #       from ingenious.services.azure_search.client_init import make_search_client
+    # -----------------------------------------------------------------
+
+    # Import the module-under-test alias already used at top of file
+    # (it’s the same as: import ... as kb; we reuse that here)
+    # If you don’t have `kb` in this scope, do the explicit import:
+    # import ingenious.services.chat_services.multi_agent.conversation_flows.knowledge_base_agent.knowledge_base_agent as kb
+
+    def _build_fake_client_from_cfg(cfg: Any) -> _FakeAsyncSearchClient:
+        """
+        The KB preflight passes a SimpleNamespace-like stub carrying:
+          - search_endpoint
+          - search_index_name
+          - search_key (either a plain str or a SecretStr)
+        We unwrap SecretStr if present and return our fake client.
+        """
+        endpoint = getattr(cfg, "search_endpoint")
+        index_name = getattr(cfg, "search_index_name")
+
+        # Unwrap optional SecretStr (tests might pass a plain string instead).
+        key_obj = getattr(cfg, "search_key", "")
+        if hasattr(key_obj, "get_secret_value"):
+            try:
+                key = key_obj.get_secret_value()
+            except Exception:
+                key = ""
+        else:
+            key = key_obj or ""
+
+        return _FakeAsyncSearchClient(
+            endpoint=endpoint,
+            index_name=index_name,
+            credential=_FakeAzureKeyCredential(key),
+        )
+
+    # Patch the KB module's symbol so preflight always gets our fake with the right surface.
+    monkeypatch.setattr(kb, "make_search_client", _build_fake_client_from_cfg, raising=True)
+
+    # -----------------------------------------------------------------
+    # 4) (Optional) Reset any cached factory singleton to avoid stale
+    #    state if other tests touched it in a different order.
+    #    This is defensive; ignore if the symbol isn't present.
+    # -----------------------------------------------------------------
+    try:
+        monkeypatch.setattr(
+            "ingenious.services.azure_search.client_init._FACTORY_SINGLETON",
+            None,
+            raising=False,
+        )
+    except Exception:
+        pass
 
 def make_config(
     memory_path: str,
@@ -452,11 +545,13 @@ def _common_patches(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     install_dummy_token_counter(monkeypatch)
     install_memory_manager(monkeypatch)
 
-    # Patch the KB module directly (no global leak)
+    # Patch new client factory
     monkeypatch.setattr(
         kb,
-        "create_aoai_chat_completion_client_from_config",
-        lambda cfg: DummyLLMClient(),
+        "AzureClientFactory",
+        SimpleNamespace(
+            create_openai_chat_completion_client=lambda _cfg: DummyLLMClient()
+        ),
     )
     monkeypatch.setattr(kb, "LLMUsageTracker", AcceptingLogHandler, raising=False)
     monkeypatch.setattr(kb, "FunctionTool", DummyFunctionTool)
