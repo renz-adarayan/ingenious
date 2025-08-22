@@ -113,7 +113,7 @@ async def test_provider_retrieve_semantic_happy_path(
         raising=False,
     )
     monkeypatch.setattr(
-        "ingenious.services.azure_search.provider.make_search_client",
+        "ingenious.services.azure_search.provider.make_async_search_client",
         lambda cfg: fake_rerank_client,
         raising=False,
     )
@@ -182,7 +182,7 @@ async def test_provider_retrieve_semantic_error_fallback(
         raising=False,
     )
     monkeypatch.setattr(
-        "ingenious.services.azure_search.provider.make_search_client",
+        "ingenious.services.azure_search.provider.make_async_search_client",
         lambda cfg: fake_rerank_client,
         raising=False,
     )
@@ -247,7 +247,7 @@ async def test_provider_close_tolerates_sync_or_async(
         raising=False,
     )
     monkeypatch.setattr(
-        "ingenious.services.azure_search.provider.make_search_client",
+        "ingenious.services.azure_search.provider.make_async_search_client",
         lambda cfg: fake_rerank_client,
         raising=False,
     )
@@ -292,7 +292,7 @@ async def test_provider_answer_blank_query_short_circuits(
         raising=False,
     )
     monkeypatch.setattr(
-        "ingenious.services.azure_search.provider.make_search_client",
+        "ingenious.services.azure_search.provider.make_async_search_client",
         lambda cfg: fake_rerank_client,
         raising=False,
     )
@@ -344,7 +344,7 @@ async def test_provider_answer_raises_when_generation_disabled(
         raising=False,
     )
     monkeypatch.setattr(
-        "ingenious.services.azure_search.provider.make_search_client",
+        "ingenious.services.azure_search.provider.make_async_search_client",
         lambda cfg: fake_rerank_client,
         raising=False,
     )
@@ -399,7 +399,7 @@ async def test_provider_answer_passes_query_unmodified(
         raising=False,
     )
     monkeypatch.setattr(
-        "ingenious.services.azure_search.provider.make_search_client",
+        "ingenious.services.azure_search.provider.make_async_search_client",
         lambda cfg: fake_rerank_client,
         raising=False,
     )

@@ -102,7 +102,7 @@ async def test_retriever_vector_and_lexical_clients_both_built_through_client_in
         return _SpyOpenAI()
 
     with patch(
-        "ingenious.services.azure_search.client_init.make_search_client", new=_mk_sc
+        "ingenious.services.azure_search.client_init.make_async_search_client", new=_mk_sc
     ), patch(
         "ingenious.services.azure_search.client_init.make_async_openai_client",
         new=_mk_aoai,

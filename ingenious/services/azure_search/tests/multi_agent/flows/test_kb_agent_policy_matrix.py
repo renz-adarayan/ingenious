@@ -159,7 +159,7 @@ def install_azure_sdk_ok(monkeypatch: pytest.MonkeyPatch) -> None:
       * azure.search.documents.aio.SearchClient
           - async get_document_count()
           - async close()
-    Finally, we patch the *KB module's* 'make_search_client' symbol to return our
+    Finally, we patch the *KB module's* 'make_async_search_client' symbol to return our
     fake client, guaranteeing preflight sees a client with the expected methods.
     """
 
@@ -218,8 +218,8 @@ def install_azure_sdk_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     # -----------------------------------------------------------------
     # 3) Patch the symbol where it is USED (the KB module), not the
     #    original factory. The KB file did:
-    #       from ingenious.services.azure_search.client_init import make_search_client
-    #    so we must patch kb.make_search_client directly.
+    #       from ingenious.services.azure_search.client_init import make_async_search_client
+    #    so we must patch kb.make_async_search_client directly.
     # -----------------------------------------------------------------
 
     import ingenious.services.chat_services.multi_agent.conversation_flows.knowledge_base_agent.knowledge_base_agent as kb
@@ -251,7 +251,7 @@ def install_azure_sdk_ok(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
     # This ensures preflight builds a client with async get_document_count() + close().
-    monkeypatch.setattr(kb, "make_search_client", _build_fake_client_from_cfg, raising=True)
+    monkeypatch.setattr(kb, "make_async_search_client", _build_fake_client_from_cfg, raising=True)
 
     # -----------------------------------------------------------------
     # 4) (Optional) Reset any cached factory singleton to avoid stale

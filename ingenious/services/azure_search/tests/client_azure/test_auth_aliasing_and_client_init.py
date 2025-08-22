@@ -68,7 +68,7 @@ def test_client_init_delegates_to_factory(monkeypatch: "MonkeyPatch") -> None:
     """Ensure client init delegates to the Azure client factory methods.
 
     This test patches the factory's creation methods to record calls and return
-    sentinels. It then verifies that `make_search_client` and
+    sentinels. It then verifies that `make_async_search_client` and
     `make_async_openai_client` invoke those factory methods.
 
     Args:
@@ -138,7 +138,7 @@ def test_client_init_delegates_to_factory(monkeypatch: "MonkeyPatch") -> None:
         top_n_final=3,
     )
 
-    sc = client_init.make_search_client(cfg)
+    sc = client_init.make_async_search_client(cfg)
     oc = client_init.make_async_openai_client(cfg)
     assert called["search"] is True
     assert called["openai"] is True

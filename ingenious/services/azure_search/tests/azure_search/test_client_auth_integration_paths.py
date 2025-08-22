@@ -1,7 +1,7 @@
 """KB preflight ↔ client_init integration hooks (auth/init paths).
 
 Why:
-- Validate that KB preflight calls into `client_init.make_search_client`.
+- Validate that KB preflight calls into `client_init.make_async_search_client`.
 - Validate that missing SDKs surface as a KB preflight 'sdk_missing' error.
 
 Notes:
@@ -36,8 +36,8 @@ def _import_kb_or_skip() -> Any:
 
 
 @pytest.mark.asyncio
-async def test_kb_preflight_uses_make_search_client_and_prefers_aad_over_key() -> None:
-    """Assert that KB preflight calls `make_search_client` (AAD preference optional).
+async def test_kb_preflight_uses_make_async_search_client_and_prefers_aad_over_key() -> None:
+    """Assert that KB preflight calls `make_async_search_client` (AAD preference optional).
 
     Why: Even if credential selection is factory-controlled, KB preflight must
     delegate to client_init. This test asserts the delegation. If AAD preference
@@ -52,7 +52,7 @@ async def test_kb_preflight_uses_make_search_client_and_prefers_aad_over_key() -
 
     called: list[bool] = []
 
-    def _spy_make_search_client(*_a: Any, **_k: Any) -> Any:
+    def _spy_make_async_search_client(*_a: Any, **_k: Any) -> Any:
         """Spy that records invocation and returns a closeable stub."""
         called.append(True)
 
@@ -63,8 +63,8 @@ async def test_kb_preflight_uses_make_search_client_and_prefers_aad_over_key() -
         return _Stub()
 
     with patch(
-        "ingenious.services.azure_search.client_init.make_search_client",
-        new=_spy_make_search_client,
+        "ingenious.services.azure_search.client_init.make_async_search_client",
+        new=_spy_make_async_search_client,
     ):
         # Signature unknown: exercise in a tolerant manner
         try:
@@ -75,7 +75,7 @@ async def test_kb_preflight_uses_make_search_client_and_prefers_aad_over_key() -
             # If the KB preflight has required args, we cannot exercise it here.
             pytest.skip("KB preflight requires args not available for this test.")
 
-    assert called, "Expected client_init.make_search_client to be invoked by preflight."
+    assert called, "Expected client_init.make_async_search_client to be invoked by preflight."
 
 
 @pytest.mark.asyncio

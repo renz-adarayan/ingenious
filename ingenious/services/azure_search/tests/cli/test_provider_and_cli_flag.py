@@ -83,7 +83,7 @@ def test_provider_constructor_override_true(
             return None
 
     monkeypatch.setattr(
-        "ingenious.services.azure_search.provider.make_search_client",
+        "ingenious.services.azure_search.provider.make_async_search_client",
         lambda _cfg: _Dummy(),
     )
 
@@ -125,7 +125,7 @@ def test_provider_constructor_override_none_preserves(
             return None
 
     monkeypatch.setattr(
-        "ingenious.services.azure_search.provider.make_search_client",
+        "ingenious.services.azure_search.provider.make_async_search_client",
         lambda _cfg: _Dummy(),
     )
 

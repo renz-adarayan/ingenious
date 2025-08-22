@@ -103,7 +103,7 @@ async def test_invalid_kb_mode_coerces_to_direct(
     ---------------------------
     - The KB flow performs a strict preflight: `await client.get_document_count()`.
     - In this test file we published fake `azure.*` modules into sys.modules (good),
-      but we did NOT guarantee that the KB module’s `make_search_client` returns
+      but we did NOT guarantee that the KB module’s `make_async_search_client` returns
       an instance of THAT fake async client.
     - If a prior patch returns some other fake without `get_document_count`, preflight
       raises, Azure path is skipped, and the flow drops to the Chroma path, causing
@@ -111,7 +111,7 @@ async def test_invalid_kb_mode_coerces_to_direct(
 
     What we add here:
     -----------------
-    - Patch the KB module’s `make_search_client` (the **import site** used by the flow)
+    - Patch the KB module’s `make_async_search_client` (the **import site** used by the flow)
       to build our fake async SearchClient type that implements `get_document_count()`.
     - Clear policy env vars so nothing forces a local/non-Azure path.
     """
@@ -181,7 +181,7 @@ async def test_invalid_kb_mode_coerces_to_direct(
     )
     sys.modules["azure.search.documents.aio"].SearchClient = _Client  # type: ignore[attr-defined]
 
-    # 4) CRITICAL: Patch the KB module’s *imported* symbol `make_search_client` so that
+    # 4) CRITICAL: Patch the KB module’s *imported* symbol `make_async_search_client` so that
     #    the KB flow actually constructs OUR fake async client above. Patching the factory
     #    module is NOT sufficient because the KB file imported the function by value.
     def _make_fake_client_from_cfg(cfg: Any) -> _Client:
@@ -209,7 +209,7 @@ async def test_invalid_kb_mode_coerces_to_direct(
         )
 
     # Patch the symbol where it is used by the flow.
-    monkeypatch.setattr(kb, "make_search_client", _make_fake_client_from_cfg, raising=True)
+    monkeypatch.setattr(kb, "make_async_search_client", _make_fake_client_from_cfg, raising=True)
 
     # 5) Make sure the Azure provider import is “available” to the flow so
     #    `_is_azure_search_available()` returns True.

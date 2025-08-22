@@ -10,7 +10,7 @@ Key entry points:
 
 Side effects:
 - Patches `build_search_pipeline` to a minimal closeable stub to avoid network.
-- Patches **the provider import site** `make_search_client` so the provider uses
+- Patches **the provider import site** `make_async_search_client` so the provider uses
   our stub rerank client (important because provider imports the symbol).
 
 Usage:
@@ -148,9 +148,9 @@ async def test_end_to_end_kb_direct_uses_client_init_key_path_and_closes_clients
         make_calls.append(True)
         return rerank_stub
 
-    # IMPORTANT: patch the **provider import site** for `make_search_client`.
+    # IMPORTANT: patch the **provider import site** for `make_async_search_client`.
     with patch(
-        "ingenious.services.azure_search.provider.make_search_client", new=_mk_sc
+        "ingenious.services.azure_search.provider.make_async_search_client", new=_mk_sc
     ), patch(
         "ingenious.services.azure_search.provider.build_search_pipeline",
         new=lambda *_a, **_k: pipeline_stub,
@@ -162,7 +162,7 @@ async def test_end_to_end_kb_direct_uses_client_init_key_path_and_closes_clients
         assert out and out[0]["id"] == "F"
 
         # Assert delegation to client_init for rerank client construction.
-        assert make_calls, "Expected client_init.make_search_client to be called."
+        assert make_calls, "Expected client_init.make_async_search_client to be called."
 
         # Ensure close() is awaited on both pipeline and rerank client.
         await provider.close()

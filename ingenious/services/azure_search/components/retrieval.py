@@ -56,9 +56,9 @@ class AzureSearchRetriever:
         """
         self._config = config
         if search_client is None or embedding_client is None:
-            from ..client_init import make_async_openai_client, make_search_client
+            from ..client_init import make_async_openai_client, make_async_search_client
 
-            self._search_client = search_client or make_search_client(config)
+            self._search_client = search_client or make_async_search_client(config)
             self._embedding_client = embedding_client or make_async_openai_client(
                 config
             )

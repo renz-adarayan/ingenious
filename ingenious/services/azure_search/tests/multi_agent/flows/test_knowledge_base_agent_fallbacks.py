@@ -119,7 +119,7 @@ async def test_kb_agent_azure_runtime_failure_falls_back_to_chroma(
         # --- NEW: patch the KB module’s imported symbol so preflight builds our _Client ---
         patch(
             # IMPORTANT: patch the symbol where it is USED (KB module), not the factory module.
-            "ingenious.services.chat_services.multi_agent.conversation_flows.knowledge_base_agent.knowledge_base_agent.make_search_client",
+            "ingenious.services.chat_services.multi_agent.conversation_flows.knowledge_base_agent.knowledge_base_agent.make_async_search_client",
             # We provide a small builder that adapts the KB preflight stub (SimpleNamespace)
             # into our _Client. This guarantees the preflight call `await client.get_document_count()`
             # finds the async method and succeeds in THIS test.

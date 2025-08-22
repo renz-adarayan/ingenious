@@ -27,7 +27,7 @@ def _get_factory() -> Any:
     return _FACTORY_SINGLETON
 
 
-def make_search_client(cfg: "SearchConfig", **client_options: Any) -> "SearchClient":
+def make_async_search_client(cfg: "SearchConfig", **client_options: Any) -> "SearchClient":
     """Create the async Azure Search client via AzureClientFactory.
 
     Any keyword args in `client_options` are forwarded to the underlying SDK ctor.

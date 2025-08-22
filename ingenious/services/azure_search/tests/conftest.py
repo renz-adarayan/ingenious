@@ -407,7 +407,7 @@ def import_provider_with_stubs(
         azroot, "build_search_pipeline", lambda *a, **kw: dummy_pipeline, raising=True
     )
 
-    # Also stub provider's make_search_client (to avoid building real clients)
+    # Also stub provider's make_async_search_client (to avoid building real clients)
     # We'll import the provider module now and patch its name directly.
     provider_mod = importlib.import_module("ingenious.services.azure_search.provider")
     monkeypatch.setattr(
@@ -426,7 +426,7 @@ def import_provider_with_stubs(
 
     monkeypatch.setattr(
         provider_mod,
-        "make_search_client",
+        "make_async_search_client",
         lambda cfg: _DummyRerankClient(),
         raising=True,
     )
@@ -1096,7 +1096,7 @@ def patch_external_sdks(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None
 
     This fixture performs several critical patches:
     - Replaces Azure Search model classes (`QueryType`, `VectorizedQuery`) with dummies.
-    - Replaces client factory functions (`make_search_client`, `make_async_openai_client`)
+    - Replaces client factory functions (`make_async_search_client`, `make_async_openai_client`)
       to return shared `AsyncMock` instances.
     - Ensures these patches are applied across various modules that might import them.
     """
@@ -1149,7 +1149,7 @@ def patch_external_sdks(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None
         raising=False,
     )
     monkeypatch.setattr(
-        "ingenious.services.azure_search.client_init.make_search_client",
+        "ingenious.services.azure_search.client_init.make_async_search_client",
         lambda cfg: search_client,
         raising=False,
     )
@@ -1171,7 +1171,7 @@ def patch_external_sdks(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None
             pass
         try:
             monkeypatch.setattr(
-                f"{mod}.make_search_client", lambda cfg: search_client, raising=False
+                f"{mod}.make_async_search_client", lambda cfg: search_client, raising=False
             )
         except Exception:
             pass

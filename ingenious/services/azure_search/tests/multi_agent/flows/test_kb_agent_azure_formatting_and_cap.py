@@ -40,16 +40,16 @@ def install_azure_sdk_ok(monkeypatch: pytest.MonkeyPatch) -> None:
         * azure.search.documents.aio.SearchClient
           - async get_document_count()
           - async close()
-    - Finally, we patch the *symbol where it is used* (`kb.make_search_client`)
+    - Finally, we patch the *symbol where it is used* (`kb.make_async_search_client`)
       to return an instance of our fake client. This guarantees the KB preflight
       sees a client compatible with the real API, avoiding
       `'FakeSearchClient' has no attribute 'get_document_count'` errors.
 
     Important detail:
     -----------------
-    We patch *kb.make_search_client*, not the original factory module, because
+    We patch *kb.make_async_search_client*, not the original factory module, because
     the KB file imported the symbol directly via:
-        from ingenious.services.azure_search.client_init import make_search_client
+        from ingenious.services.azure_search.client_init import make_async_search_client
     Patching the import site is necessary for the KB module to see our change.
     """
     import sys
@@ -101,12 +101,12 @@ def install_azure_sdk_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "azure.core.credentials", fake_credentials_mod)
     monkeypatch.setitem(sys.modules, "azure.search.documents.aio", fake_aio_mod)
 
-    # 4) Patch the KB module's `make_search_client` symbol so that when the KB
-    #    code calls `make_search_client(cfg_stub)`, we return the fake SDK client
+    # 4) Patch the KB module's `make_async_search_client` symbol so that when the KB
+    #    code calls `make_async_search_client(cfg_stub)`, we return the fake SDK client
     #    we just installed (which has the async methods preflight expects).
     #
     #    NOTE: Patch the import *site* (the KB module), not the factory module,
-    #    because the KB file imported `make_search_client` by value, not by name.
+    #    because the KB file imported `make_async_search_client` by value, not by name.
     import ingenious.services.chat_services.multi_agent.conversation_flows.knowledge_base_agent.knowledge_base_agent as kb  # noqa: E501
 
     def _build_fake_client_from_cfg(cfg: Any) -> _FakeAsyncSearchClient:
@@ -140,7 +140,7 @@ def install_azure_sdk_ok(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
     # Patch the symbol *used by the KB module*.
-    monkeypatch.setattr(kb, "make_search_client", _build_fake_client_from_cfg, raising=True)
+    monkeypatch.setattr(kb, "make_async_search_client", _build_fake_client_from_cfg, raising=True)
 
     # 5) (Optional) If some earlier test cached a factory singleton, clear it.
     #    This avoids surprising interactions when tests run in a different order.

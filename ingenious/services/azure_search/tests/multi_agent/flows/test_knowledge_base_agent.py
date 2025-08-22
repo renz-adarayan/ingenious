@@ -119,13 +119,13 @@ class MockAssistantAgent:
 def patch_tool_and_agent(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Patches FunctionTool, AssistantAgent, and installs a minimal fake Azure SDK.
-    ALSO patches the KB module's `make_search_client` so strict preflight
+    ALSO patches the KB module's `make_async_search_client` so strict preflight
     (`await client.get_document_count()`) *always* succeeds in tests.
 
-    Why we patch `make_search_client` here:
+    Why we patch `make_async_search_client` here:
     ---------------------------------------
     - The KB flow imported the function by value:
-          from ingenious.services.azure_search.client_init import make_search_client
+          from ingenious.services.azure_search.client_init import make_async_search_client
     - If another test earlier monkeypatched the factory, this module's imported
       symbol may still point at a different fake that lacks `get_document_count`.
     - By patching the *KB module's* symbol here, we guarantee preflight will
@@ -200,7 +200,7 @@ def patch_tool_and_agent(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "azure.search.documents.aio", aio)
 
     # ------------------------------------------------------------------
-    # 3) Patch the *KB module's* `make_search_client` so that the KB flow
+    # 3) Patch the *KB module's* `make_async_search_client` so that the KB flow
     #    actually CONSTRUCTS our fake async client above during preflight.
     #
     #    IMPORTANT: We patch the import *site* used by the flow (the KB module),
@@ -237,7 +237,7 @@ def patch_tool_and_agent(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Patch the symbol where the KB module calls it.
     monkeypatch.setattr(
-        "ingenious.services.chat_services.multi_agent.conversation_flows.knowledge_base_agent.knowledge_base_agent.make_search_client",
+        "ingenious.services.chat_services.multi_agent.conversation_flows.knowledge_base_agent.knowledge_base_agent.make_async_search_client",
         _build_fake_client_from_cfg,
         raising=True,
     )
@@ -522,7 +522,7 @@ async def test_azure_provider_retrieve_cleans_and_reranks(
     fake_client = MagicMock()
     fake_client.search = AsyncMock(return_value=async_iter(fake_rerank))
     monkeypatch.setattr(
-        "ingenious.services.azure_search.provider.make_search_client",
+        "ingenious.services.azure_search.provider.make_async_search_client",
         lambda cfg: fake_client,
     )
     # Ensure QueryType present
@@ -591,7 +591,7 @@ async def test_azure_provider_rerank_fallback_when_ids_missing(
     fake_client = MagicMock()
     fake_client.search = AsyncMock()  # should not be called due to missing IDs
     monkeypatch.setattr(
-        "ingenious.services.azure_search.provider.make_search_client",
+        "ingenious.services.azure_search.provider.make_async_search_client",
         lambda cfg: fake_client,
     )
     monkeypatch.setattr(
@@ -652,7 +652,7 @@ async def test_azure_provider_answer_delegates_to_pipeline(
     fake_client = MagicMock()
     fake_client.search = AsyncMock()
     monkeypatch.setattr(
-        "ingenious.services.azure_search.provider.make_search_client",
+        "ingenious.services.azure_search.provider.make_async_search_client",
         lambda cfg: fake_client,
     )
     monkeypatch.setattr(

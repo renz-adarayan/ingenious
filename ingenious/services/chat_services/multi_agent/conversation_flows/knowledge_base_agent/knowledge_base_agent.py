@@ -50,7 +50,7 @@ from autogen_core import (  # noqa: F401 (CancellationToken kept for API parity)
 )
 from autogen_core.tools import FunctionTool as _FunctionTool
 from ingenious.client.azure import AzureClientFactory
-from ingenious.services.azure_search.client_init import make_search_client
+from ingenious.services.azure_search.client_init import make_async_search_client
 from ingenious.models.chat import ChatRequest, ChatResponse, ChatResponseChunk
 from ingenious.services.chat_services.multi_agent.service import IConversationFlow
 from ingenious.services.retrieval.errors import PreflightError
@@ -1002,7 +1002,7 @@ class ConversationFlow(IConversationFlow):
                 search_endpoint=endpoint,
                 search_key=SecretStr(key_val),
             )
-            client = make_search_client(cfg_stub)  # no type ignore needed
+            client = make_async_search_client(cfg_stub)  # no type ignore needed
         except ImportError as e:
             # If the factory or its deps are unavailable, classify as SDK missing.
             raise PreflightError(

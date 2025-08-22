@@ -97,7 +97,7 @@ async def test_provider_retrieve_without_semantic_uses_fused_scores_and_top_k(
         raising=False,
     )
     monkeypatch.setattr(
-        "ingenious.services.azure_search.provider.make_search_client",
+        "ingenious.services.azure_search.provider.make_async_search_client",
         lambda cfg: fake_rerank_client,  # type: ignore[no-untyped-def]
         raising=False,
     )

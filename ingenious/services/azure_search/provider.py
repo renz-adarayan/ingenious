@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 from ingenious.services.retrieval.errors import GenerationDisabledError
 
 from .builders import build_search_config_from_settings
-from .client_init import make_search_client
+from .client_init import make_async_search_client
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +103,7 @@ class AzureSearchProvider:
             )
         self._pipeline = build_search_pipeline(self._cfg)
         # Separate client for L2 (public call)
-        self._rerank_client = make_search_client(self._cfg)
+        self._rerank_client = make_async_search_client(self._cfg)
 
     async def retrieve(self, query: str, top_k: int = 10) -> list[dict[str, Any]]:
         """Executes a hybrid search, fuses results, and applies semantic reranking.

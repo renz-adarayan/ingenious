@@ -100,7 +100,7 @@ async def test_provider_retrieve_timeout_propagates(
         raising=False,
     )
     monkeypatch.setattr(
-        "ingenious.services.azure_search.provider.make_search_client",
+        "ingenious.services.azure_search.provider.make_async_search_client",
         _mock_make_client,
         raising=False,
     )
@@ -150,7 +150,7 @@ async def test_provider_retrieve_topk_zero_returns_empty(
         raising=False,
     )
     monkeypatch.setattr(
-        "ingenious.services.azure_search.provider.make_search_client",
+        "ingenious.services.azure_search.provider.make_async_search_client",
         _mock_make_client,
         raising=False,
     )

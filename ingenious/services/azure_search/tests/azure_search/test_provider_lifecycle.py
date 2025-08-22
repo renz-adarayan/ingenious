@@ -41,7 +41,7 @@ async def test_provider_close_calls_all_underlying_clients(
             return_value=mock_pipeline,
         ),
         patch(
-            "ingenious.services.azure_search.provider.make_search_client",
+            "ingenious.services.azure_search.provider.make_async_search_client",
             return_value=mock_rerank_client,
         ),
         patch(

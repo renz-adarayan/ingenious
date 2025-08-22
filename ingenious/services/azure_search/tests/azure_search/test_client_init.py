@@ -6,7 +6,7 @@ Unit tests for the async Azure client initialization helpers in
 This module validates the following contract:
 
 1) The thin wrapper functions in `client_init`:
-   - `make_search_client(cfg, **client_options)`
+   - `make_async_search_client(cfg, **client_options)`
    - `make_async_openai_client(cfg, **client_options)`
    forward configuration and client options to the central `AzureClientFactory`.
    They unwrap secrets (e.g., `SecretStr`) but otherwise remain pass-through.
@@ -196,7 +196,7 @@ def _make_cfg(**overrides: Any) -> SearchConfig:
     Create a valid SearchConfig with reasonable defaults for tests.
 
     The defaults include both Search and OpenAI endpoints/keys so we can exercise
-    both `make_search_client` and `make_async_openai_client` in one place.
+    both `make_async_search_client` and `make_async_openai_client` in one place.
     Any field can be overridden by passing keyword arguments.
     """
     data: dict[str, Any] = dict(
@@ -217,9 +217,9 @@ def _make_cfg(**overrides: Any) -> SearchConfig:
 #                                      TESTS
 # --------------------------------------------------------------------------------------
 
-def test_make_search_client_uses_secretstr(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_make_async_search_client_uses_secretstr(monkeypatch: pytest.MonkeyPatch) -> None:
     """
-    Ensure `make_search_client` unwraps SecretStr for the AzureKeyCredential and maps fields.
+    Ensure `make_async_search_client` unwraps SecretStr for the AzureKeyCredential and maps fields.
 
     Assertions:
       - The returned object is the dummy SearchClient.
@@ -229,7 +229,7 @@ def test_make_search_client_uses_secretstr(monkeypatch: pytest.MonkeyPatch) -> N
     client_init, d = _reload_client_init_with_dummies(monkeypatch)
 
     cfg = _make_cfg()
-    sc: Any = client_init.make_search_client(cfg)
+    sc: Any = client_init.make_async_search_client(cfg)
 
     assert isinstance(sc, d["SearchClient"])
     assert sc.endpoint == cfg.search_endpoint
@@ -316,7 +316,7 @@ def test_make_async_openai_client_drops_unknown_kwargs_without_error(
     assert not hasattr(oc, "foo")
 
 
-def test_make_search_client_forwards_client_options(
+def test_make_async_search_client_forwards_client_options(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
@@ -333,7 +333,7 @@ def test_make_search_client_forwards_client_options(
     client_init, d = _reload_client_init_with_dummies(monkeypatch)
     cfg = _make_cfg()
 
-    sc: Any = client_init.make_search_client(cfg, http_logging_policy=True, my_opt=123)
+    sc: Any = client_init.make_async_search_client(cfg, http_logging_policy=True, my_opt=123)
 
     assert isinstance(sc, d["SearchClient"])
     assert sc.extra_kwargs.get("http_logging_policy") is True

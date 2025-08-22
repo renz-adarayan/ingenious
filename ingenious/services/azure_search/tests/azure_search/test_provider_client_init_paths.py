@@ -11,8 +11,8 @@ Key entry points:
 I/O & deps:
 - No azure/openai SDK calls. We patch factory functions to return dummies.
 - IMPORTANT: we patch at both import sites:
-  - provider.make_search_client (provider’s reranker client)
-  - client_init.make_search_client + client_init.make_async_openai_client
+  - provider.make_async_search_client (provider’s reranker client)
+  - client_init.make_async_search_client + client_init.make_async_openai_client
     (used inside the search pipeline/builders).
 
 Usage:
@@ -209,12 +209,12 @@ async def test_provider_retrieve_instantiates_search_client_via_client_init_with
         return _DummyAsyncOpenAI()
 
     # Patch at BOTH import sites:
-    # - provider.make_search_client (the provider's L2/rerank client)
-    # - client_init.make_search_client + client_init.make_async_openai_client (pipeline)
+    # - provider.make_async_search_client (the provider's L2/rerank client)
+    # - client_init.make_async_search_client + client_init.make_async_openai_client (pipeline)
     with patch(
-        "ingenious.services.azure_search.provider.make_search_client", new=_mk_sc
+        "ingenious.services.azure_search.provider.make_async_search_client", new=_mk_sc
     ), patch(
-        "ingenious.services.azure_search.client_init.make_search_client", new=_mk_sc
+        "ingenious.services.azure_search.client_init.make_async_search_client", new=_mk_sc
     ), patch(
         "ingenious.services.azure_search.client_init.make_async_openai_client",
         new=_mk_aoai,
@@ -223,7 +223,7 @@ async def test_provider_retrieve_instantiates_search_client_via_client_init_with
 
         out: List[dict[str, Any]] = await provider.retrieve("what is fusion?", top_k=2)
         assert isinstance(out, list) and out, "Expected non-empty retrieval output."
-        assert made_sc >= 1, "Expected make_search_client to be used."
+        assert made_sc >= 1, "Expected make_async_search_client to be used."
         assert made_aoai >= 1, "Expected make_async_openai_client to be used."
 
         # Cleanup path (ensures our stubs implement close()).

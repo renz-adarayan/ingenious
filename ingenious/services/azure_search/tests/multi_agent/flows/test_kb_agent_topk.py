@@ -345,7 +345,7 @@ def azure_sdk_compat(monkeypatch: pytest.MonkeyPatch) -> None:
     - We don't want real cloud calls or the real SDK in tests.
     - So we:
       1) publish tiny fake `azure.*` modules into `sys.modules` so imports resolve;
-      2) patch the *KB module's* `make_search_client` to instantiate *our* fake
+      2) patch the *KB module's* `make_async_search_client` to instantiate *our* fake
          async `SearchClient`, guaranteeing it has the async methods the preflight calls.
 
     Without step (2), some other fake (lacking `get_document_count`) can still be
@@ -407,13 +407,13 @@ def azure_sdk_compat(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "azure.search.documents.aio", fake_aio_mod)
 
     # -----------------------------------------------------------------
-    # 3) Patch the *KB module's* make_search_client symbol so that the
+    # 3) Patch the *KB module's* make_async_search_client symbol so that the
     #    KB preflight *always* constructs our fake async client above.
     #
     #    IMPORTANT: We patch the symbol where it is USED (the KB module),
     #    not the factory module, because the KB file imported the symbol
     #    by value:
-    #       from ingenious.services.azure_search.client_init import make_search_client
+    #       from ingenious.services.azure_search.client_init import make_async_search_client
     # -----------------------------------------------------------------
 
     # Import the module-under-test alias already used at top of file
@@ -449,7 +449,7 @@ def azure_sdk_compat(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
     # Patch the KB module's symbol so preflight always gets our fake with the right surface.
-    monkeypatch.setattr(kb, "make_search_client", _build_fake_client_from_cfg, raising=True)
+    monkeypatch.setattr(kb, "make_async_search_client", _build_fake_client_from_cfg, raising=True)
 
     # -----------------------------------------------------------------
     # 4) (Optional) Reset any cached factory singleton to avoid stale

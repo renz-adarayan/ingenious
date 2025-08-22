@@ -72,9 +72,9 @@ class AdvancedSearchPipeline:
 
         # A dedicated SearchClient is needed for the L2 Semantic Ranking step
         if rerank_client is None:
-            from ..client_init import make_search_client
+            from ..client_init import make_async_search_client
 
-            self._rerank_client = make_search_client(config)
+            self._rerank_client = make_async_search_client(config)
         else:
             self._rerank_client = rerank_client
 
