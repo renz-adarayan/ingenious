@@ -1,21 +1,18 @@
-"""Provides a CLI for the Advanced Azure AI Search service.
+"""CLI for Advanced Azure AI Search.
 
-This module uses Typer to create a command-line interface for a multi-stage
-search pipeline. It allows users to execute complex search queries against an
-Azure AI Search index, leveraging features like retrieval, result fusion (DAT),
-semantic reranking, and generative answering (RAG).
-
-The main entry point is the `run` command, which accepts various configuration
-options via command-line flags or environment variables. To simplify usage,
-the CLI defaults to the `run` command, allowing users to pass a query
-directly (e.g., `azure-search "my query"`).
+This module provides a Typer-based command-line interface that orchestrates a
+multi-stage search pipeline over an Azure AI Search index. It supports classic
+retrieval, result fusion (DAT), semantic reranking, and generative answering
+(RAG). The default command is `run`, so users can execute queries directly
+(e.g., `azure-search "my query"`). Key entry points are the `run_search`
+command and the lazy-loaded `build_search_pipeline` shim used by tests.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable
 
 import click
 import typer
@@ -25,18 +22,28 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from typer.core import TyperGroup
 
-# ✅ Safe at import-time
+# ── Local imports ────────────────────────────────────────────────────────────
 from .config import DEFAULT_DAT_PROMPT, SearchConfig
 
-# ── Lazy loader for the heavy pipeline ────────────────────────────────────────
-_build_pipeline_impl: Optional[Callable[..., Any]] = None
+# ── Module constants (replace magic values) ──────────────────────────────────
+APP_NAME = "azure-search"
+APP_HELP = "CLI interface for the Ingenious Advanced Azure AI Search service."
+RUN_COMMAND_NAME = "run"
+DEFAULT_MAX_CONTENT_WIDTH = 200
+STATUS_SPINNER_NAME = "dots"
+CONTENT_SAMPLE_PREVIEW_LEN = 250
+DEFAULT_OPENAI_API_VERSION = "2024-02-01"
+DEFAULT_LOGGING_LEVEL = logging.WARNING
+
+# ── Lazy loader for the heavy pipeline ───────────────────────────────────────
+_build_pipeline_impl: Callable[..., Any] | None = None
 
 
 def _get_build_pipeline_impl() -> Callable[..., Any]:
-    """Lazily import and return the pipeline factory function.
+    """Import and return the pipeline factory lazily.
 
-    This avoids the high import cost of the full pipeline stack
-    (e.g., torch, transformers) when the user is just asking for --help.
+    Avoids importing heavy ML deps (e.g., torch/transformers) when users only
+    need help/usage. This keeps the CLI snappy for `--help` and similar flows.
     """
     global _build_pipeline_impl
     if _build_pipeline_impl is None:
@@ -46,85 +53,92 @@ def _get_build_pipeline_impl() -> Callable[..., Any]:
     return _build_pipeline_impl
 
 
-# Test‑patchable shim (the tests patch CLI_MOD.build_search_pipeline)
 def build_search_pipeline(*args: Any, **kwargs: Any) -> Any:
-    """Provide a test-patchable shim for the pipeline factory.
+    """Shim around the pipeline factory for test patching.
 
-    This function acts as an indirection layer, allowing tests to easily
-    mock the pipeline construction process without interfering with the
-    lazy-loading mechanism.
+    Tests patch this symbol directly without interfering with lazy-loading.
+    The logic delegates to the lazily imported implementation.
+
+    Args:
+        *args: Positional arguments for the pipeline factory.
+        **kwargs: Keyword arguments for the pipeline factory.
+
+    Returns:
+        Any: The constructed pipeline instance.
     """
     return _get_build_pipeline_impl()(*args, **kwargs)
 
 
-# ── TyperGroup that safely forwards to the default "run" command ─────────────
 class DefaultToRunTyperGroup(TyperGroup):
-    """A TyperGroup that forwards to the 'run' command by default.
+    """TyperGroup that forwards to the 'run' command by default.
 
-    This custom group enhances the user experience by allowing a query
-    to be passed directly to the application, which then invokes the 'run'
-    subcommand implicitly. It preserves standard behavior for explicit
-    subcommands like 'run' or global options like '--help'.
+    Improves UX by allowing `azure-search "query"` to call the `run` command
+    implicitly. Explicit subcommands and group-level options behave normally.
     """
 
     def resolve_command(
-        self, ctx: click.Context, args: List[str]
+        self, ctx: click.Context, args: list[str]
     ) -> tuple[str | None, click.Command | None, list[str]]:
-        """Resolve the command, defaulting to 'run' if no subcommand is found.
+        """Resolve command, defaulting to 'run' if none is found.
 
-        The logic first checks for explicit subcommands or group-level options.
-        If none are present, it retrieves the 'run' command and passes the
-        arguments to it. This makes the 'run' command the default action.
+        The logic checks for group options (e.g., --help) or explicit
+        subcommands first. If none, it forwards remaining args to `run`.
+
+        Args:
+            ctx: Click context.
+            args: Raw CLI arguments after the executable.
+
+        Returns:
+            Tuple of (command name, command object, remaining args).
         """
-        # If the first token is a group option (e.g., --help), let the group handle it.
+        # Group option like --help: let the group handle it.
         if args and args[0].startswith("-"):
             return super().resolve_command(ctx, args)
 
-        # If an explicit subcommand is present, use it.
+        # Explicit subcommand present: use it.
         if args:
             maybe_cmd = self.get_command(ctx, args[0])
             if maybe_cmd is not None:
                 return args[0], maybe_cmd, args[1:]
 
-        # Otherwise, forward to 'run' (with whatever args remain).
-        cmd = self.get_command(ctx, "run")
+        # Otherwise, forward to 'run' with remaining args.
+        cmd = self.get_command(ctx, RUN_COMMAND_NAME)
         if cmd is not None:
-            # If no args at all, Click will show "Missing argument 'QUERY'" with exit code 2.
-            return "run", cmd, args
+            return RUN_COMMAND_NAME, cmd, args
 
-        # Fallback — should not occur since we define 'run'
+        # Fallback (should not occur since 'run' is defined).
         return super().resolve_command(ctx, args)
 
 
 # Initialize Typer app (backed by our custom Typer group) and Rich console
 app = typer.Typer(
-    name="azure-search",
-    help="CLI interface for the Ingenious Advanced Azure AI Search service.",
-    cls=DefaultToRunTyperGroup,  # 👈 subclass of TyperGroup (satisfies tests)
+    name=APP_NAME,
+    help=APP_HELP,
+    cls=DefaultToRunTyperGroup,  # subclass of TyperGroup (satisfies tests)
     context_settings={
-        "max_content_width": 200,
-        # Allow routing `azure-search q --opts` → `run q --opts` safely
+        "max_content_width": DEFAULT_MAX_CONTENT_WIDTH,
+        # Route `azure-search q --opts` → `run q --opts` safely.
         "allow_extra_args": True,
         "ignore_unknown_options": True,
     },
 )
 console = Console()
 
-# Configure basic logging
-logging.basicConfig(level=logging.WARNING)
+# Configure basic logging (overridden by `setup_logging`)
+logging.basicConfig(level=DEFAULT_LOGGING_LEVEL)
 
 
-# Helper to set logging levels for the service components
 def setup_logging(verbose: bool) -> None:
-    """Configure logging levels for the application components.
+    """Configure logging levels for application components.
 
-    This function sets the log level to DEBUG if verbose mode is enabled,
-    or INFO otherwise, for key modules within the search service. This
-    allows for controlled output during execution.
+    Sets DEBUG if verbose is True, otherwise INFO, on key modules used in the
+    search service. Keeps root logger aligned when verbose is enabled.
+
+    Args:
+        verbose: Whether to enable verbose (DEBUG) logging.
     """
     level = logging.DEBUG if verbose else logging.INFO
 
-    # List of loggers used in the service (adjust based on actual logger names if needed)
     loggers = [
         "ingenious.services.azure_search.pipeline",
         "ingenious.services.azure_search.components.retrieval",
@@ -137,7 +151,7 @@ def setup_logging(verbose: bool) -> None:
         try:
             logging.getLogger(logger_name).setLevel(level)
         except Exception:
-            # Handle cases where the package structure might differ
+            # Package structure differences or missing loggers are non-fatal.
             pass
 
     if verbose:
@@ -145,29 +159,38 @@ def setup_logging(verbose: bool) -> None:
 
 
 def _run_search_pipeline(config: SearchConfig, query: str, verbose: bool) -> None:
-    """Set up the asyncio event loop and execute the search pipeline.
+    """Create an event loop and execute the search pipeline.
 
-    This helper encapsulates the asynchronous execution logic. It creates and
-    runs an asyncio event loop to manage the pipeline's async operations,
-    ensuring proper resource initialization and cleanup.
+    Encapsulates the async run to ensure proper initialization and cleanup of
+    resources. Displays the answer and relevant source chunks using Rich.
+
+    Args:
+        config: Validated search configuration model.
+        query: Natural language search query string.
+        verbose: Whether to display full exception tracebacks.
     """
 
     async def _async_run() -> None:
-        """Build, run, and clean up the search pipeline asynchronously."""
-        pipeline: Any = None
+        """Build, run, and clean up the search pipeline asynchronously.
+
+        Handles configuration errors explicitly and runtime errors generically.
+        Always attempts to close pipeline clients on exit.
+        """
+        pipeline: Any | None = None
         try:
             # Build the pipeline using the factory
             pipeline = build_search_pipeline(config)
 
-            # Make a status line visible in captured output for tests
+            # Status line visible in captured output for tests
             console.print("Executing Advanced Search Pipeline", markup=False)
 
             # Execute the pipeline
             result: dict[str, Any]
-            with console.status(
-                "[bold green]Executing Advanced Search Pipeline (L1 -> DAT -> L2 -> RAG)...",
-                spinner="dots",
-            ):
+            status_text = (
+                "[bold green]Executing Advanced Search Pipeline "
+                "(L1 -> DAT -> L2 -> RAG)..."
+            )
+            with console.status(status_text, spinner=STATUS_SPINNER_NAME):
                 result = await pipeline.get_answer(query)
 
             # Display Results
@@ -186,7 +209,13 @@ def _run_search_pipeline(config: SearchConfig, query: str, verbose: bool) -> Non
             console.print(f"\n[bold]Sources Used ({len(sources)}):[/bold]")
             for i, source in enumerate(sources):
                 score: float | str = source.get("_final_score", "N/A")
-                content_sample: str = source.get(config.content_field, "")[:250] + "..."
+                content_field = config.content_field
+                content_text: str = source.get(content_field, "")
+                content_sample = (
+                    content_text[:CONTENT_SAMPLE_PREVIEW_LEN] + "..."
+                    if content_text
+                    else ""
+                )
 
                 score_display = (
                     f"{score:.4f}" if isinstance(score, float) else str(score)
@@ -195,8 +224,11 @@ def _run_search_pipeline(config: SearchConfig, query: str, verbose: bool) -> Non
                 console.print(
                     Panel(
                         content_sample,
-                        title=f"[bold cyan]Chunk {i + 1} "
-                        f"(Score: {score_display} | Type: {source.get('_retrieval_type', 'N/A')})[/bold cyan]",
+                        title=(
+                            f"[bold cyan]Chunk {i + 1} "
+                            f"(Score: {score_display} | "
+                            f"Type: {source.get('_retrieval_type', 'N/A')})[/bold cyan]"
+                        ),
                         border_style="cyan",
                         expand=False,
                     )
@@ -218,7 +250,10 @@ def _run_search_pipeline(config: SearchConfig, query: str, verbose: bool) -> Non
                 console.print_exception(show_locals=True)
             console.print(
                 Panel(
-                    f"Pipeline execution failed: {e}\n[dim]Run with --verbose for details.[/dim]",
+                    (
+                        f"Pipeline execution failed: {e}\n"
+                        "[dim]Run with --verbose for details.[/dim]"
+                    ),
                     title="[bold red]Error[/bold red]",
                     border_style="red",
                 )
@@ -232,23 +267,20 @@ def _run_search_pipeline(config: SearchConfig, query: str, verbose: bool) -> Non
     asyncio.run(_async_run())
 
 
-# Keep a minimal callback so `azure-search --help` prints group help
 @app.callback()
 def _callback() -> None:
-    """Provide the main entry point for the Typer application group.
+    """Entry point for the Typer application group.
 
-    This callback ensures that the group-level help message is displayed
-    correctly. The logic for defaulting to the 'run' command is handled
-    by the custom DefaultToRunTyperGroup class.
+    Ensures that the group-level help message is displayed correctly. The
+    default-to-run behavior is implemented by DefaultToRunTyperGroup.
     """
     # Default-to-run is implemented in DefaultToRunTyperGroup.resolve_command
     return None
 
 
-# ── Subcommand: explicit `run` (options kept identical, with aliases) ─────────
 @app.command(
-    name="run",
-    # Accept options after positional args for tests like: run "q" --search-endpoint ...
+    name=RUN_COMMAND_NAME,
+    # Accept options after positional args, e.g.: run "q" --search-endpoint ...
     context_settings={"allow_interspersed_args": True},
 )
 def run_search(
@@ -334,7 +366,7 @@ def run_search(
         help="Number of final chunks for generation (N).",
     ),
     openai_version: str = typer.Option(
-        "2024-02-01",
+        DEFAULT_OPENAI_API_VERSION,
         "--openai-version",
         "-ov",
         help="Azure OpenAI API Version.",
@@ -362,11 +394,30 @@ def run_search(
 ) -> None:
     """Execute the advanced AI search pipeline.
 
-    This command orchestrates the full search process: retrieval, Dynamic
-    Alternating Transformation (DAT) for query fusion, semantic reranking,
-    and final answer generation. It gathers all necessary configuration
-    from command-line options or environment variables, validates them, and
-    initiates the pipeline execution.
+    Orchestrates retrieval, Dynamic Alternating Transformation (DAT) for query
+    fusion, semantic reranking, and final answer generation. Gathers config
+    from options/env, validates it, and runs the pipeline.
+
+    Args:
+        search_endpoint: Azure AI Search endpoint URL.
+        search_key: Azure AI Search API key (prompted if not provided).
+        search_index_name: Azure AI Search index name.
+        openai_endpoint: Azure OpenAI endpoint URL.
+        openai_key: Azure OpenAI API key (prompted if not provided).
+        embedding_deployment: Embedding model deployment name.
+        generation_deployment: Generation model deployment name.
+        top_k_retrieval: Initial retrieval depth (K).
+        use_semantic_ranking: Toggle Azure semantic ranking (L2).
+        semantic_config_name: Semantic config name when using ranking.
+        top_n_final: Number of chunks used for generation (N).
+        openai_version: Azure OpenAI API version.
+        dat_prompt_file: Path to custom DAT prompt file.
+        generate: Toggle final answer generation (RAG).
+        verbose: Toggle verbose logging (DEBUG).
+        query: The search query string.
+
+    Raises:
+        typer.Exit: On configuration/validation errors (exit code 1).
     """
     setup_logging(verbose)
 
@@ -375,8 +426,9 @@ def run_search(
     # Guardrail for tests: if semantic ranking is enabled, name must be supplied
     if use_semantic_ranking and not semantic_config_name:
         typer.echo(
-            "Error: Semantic ranking is enabled but no semantic configuration name was provided.\n"
-            "Supply --semantic-config or set AZURE_SEARCH_SEMANTIC_CONFIG."
+            "Error: Semantic ranking is enabled but no semantic configuration name "
+            "was provided.\nSupply --semantic-config or set "
+            "AZURE_SEARCH_SEMANTIC_CONFIG."
         )
         raise typer.Exit(code=1)
 
