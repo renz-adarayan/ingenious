@@ -1,4 +1,3 @@
-# Insight_Ingenious/ingenious/cli/main.py
 """
 Main CLI application setup for Insight Ingenious.
 

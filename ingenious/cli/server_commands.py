@@ -1,4 +1,3 @@
-# Insight_Ingenious/ingenious/cli/server_commands.py
 """
 Server-related CLI commands for Insight Ingenious.
 
