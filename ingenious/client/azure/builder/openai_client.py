@@ -1,6 +1,17 @@
+"""
+Azure OpenAI (sync) client builder.
+
+Why:
+- Keep import-time light and preserve lazy identity imports.
+- Support both API key and AAD token provider authentication paths.
+
+Usage:
+    builder = AzureOpenAIClientBuilder(model_config)
+    client = builder.build()
+"""
+
 from typing import Union
 
-from azure.identity import get_bearer_token_provider
 from openai import AzureOpenAI
 
 from ingenious.client.azure.builder.base import AzureClientBuilder
@@ -13,13 +24,14 @@ from ingenious.models.config import ModelConfig
 class AzureOpenAIClientBuilder(AzureClientBuilder):
     """Builder for Azure OpenAI clients with multiple authentication methods."""
 
-    def __init__(self, model_config: Union[ModelConfig, ModelSettings]):
+    def __init__(self, model_config: Union[ModelConfig, ModelSettings]) -> None:
+        """Extract authentication parameters and store the model config."""
         # Extract authentication parameters from config
         auth_config = self._create_auth_config_from_model_config(model_config)
         super().__init__(auth_config=auth_config)
         self.model_config = model_config
 
-    def _create_auth_config_from_model_config(self, model_config):
+    def _create_auth_config_from_model_config(self, model_config: Union[ModelConfig, ModelSettings]) -> AzureAuthConfig:
         """Create AzureAuthConfig from model configuration."""
         return AzureAuthConfig.from_config(model_config)
 
@@ -28,7 +40,7 @@ class AzureOpenAIClientBuilder(AzureClientBuilder):
         Build Azure OpenAI client based on model configuration.
 
         Returns:
-            AzureOpenAI: Configured Azure OpenAI client
+            AzureOpenAI: Configured Azure OpenAI client.
         """
         # Get credential based on authentication method
         if self.auth_config.authentication_method == AuthenticationMethod.TOKEN:
@@ -38,13 +50,14 @@ class AzureOpenAIClientBuilder(AzureClientBuilder):
                 api_version=self.model_config.api_version,
                 api_key=self.api_key,
             )
-        else:
-            # Use Azure AD authentication
-            return AzureOpenAI(
-                azure_endpoint=self.model_config.base_url,
-                api_version=self.model_config.api_version,
-                azure_ad_token_provider=get_bearer_token_provider(
-                    self.token_credential,
-                    "https://cognitiveservices.azure.com/.default",
-                ),
-            )
+
+        # Use Azure AD authentication (import at runtime to keep module light)
+        from azure.identity import get_bearer_token_provider  # type: ignore
+
+        return AzureOpenAI(
+            azure_endpoint=self.model_config.base_url,
+            api_version=self.model_config.api_version,
+            azure_ad_token_provider=get_bearer_token_provider(
+                self.token_credential, "https://cognitiveservices.azure.com/.default"
+            ),
+        )

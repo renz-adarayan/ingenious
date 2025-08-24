@@ -124,65 +124,20 @@ async def test_retry_on_429_then_success() -> None:
     assert client.attempts == 3, "Expected 2 internal retries (3 total attempts)"
     assert isinstance(docs, list) and docs and docs[0]["content"] == "ok"
 
+class _FlakyEmbeddings:
+    async def create(self, *args, **kwargs):
+        exc = RuntimeError("429 Too Many Requests")
+        setattr(exc, "status_code", 429)
+        raise exc
 
-class FlakyEmbeddingsClient:
-    """
-    Async embeddings client that simulates internal retry:
-    two transient failures then success within a single .create() call.
-    """
-
-    attempts: int
-    embeddings: FlakyEmbeddingsClient
-
-    def __init__(self) -> None:
-        """Initialize attempt counter and expose self via `embeddings` attribute."""
-        self.attempts = 0
-        self.embeddings = self  # expose .create via 'embeddings' attribute
-
-    async def create(self, *args: Any, **kwargs: Any) -> SimpleNamespace:
-        """Simulate an embedding call that retries twice internally before succeeding."""
-        # Simulate internal retry loop
-        for _ in range(3):
-            self.attempts += 1
-            if self.attempts <= 2:
-                await asyncio.sleep(0)
-                continue
-            # success shape: .data[0].embedding
-            return SimpleNamespace(data=[SimpleNamespace(embedding=[0.1, 0.2, 0.3])])
-
-
-class NoopSearchClient:
-    """A search client we won't actually use for this test."""
-
-    async def search(self, *args: Any, **kwargs: Any) -> _AsyncResults:
-        """Return an empty search result without performing any action."""
-        return _AsyncResults([])
-
+class _NoopSearch:
+    async def search(self, *args, **kwargs):
+        raise AssertionError("search() should not be reached")
 
 @pytest.mark.asyncio
-async def test_vector_embed_429_fallback_or_retry() -> None:
-    """
-    Embedding call should succeed even if the client had to retry internally.
-    Validates we propagate our retry-configured client through the call path.
-    """
-    cfg = SimpleNamespace(
-        top_k_retrieval=1,
-        embedding_deployment_name="my-embedding-deployment",
-    )
-
-    aoai = FlakyEmbeddingsClient()
-    # The retriever expects specific client types. We ignore the type mismatch
-    # to inject our mock clients for this unit test.
-    r = AzureSearchRetriever(
-        config=cfg,
-        search_client=NoopSearchClient(),  # type: ignore[arg-type]
-        embedding_client=aoai,  # type: ignore[arg-type]
-    )
-
-    # Accessing a protected method is acceptable for this focused unit test.
-    vec: list[float] = await r._generate_embedding("hello")
-
-    assert isinstance(vec, (list, tuple)), "Expected embedding vector returned"
-    assert aoai.attempts == 3, (
-        "Expected 2 internal retries (3 total attempts) for embeddings.create"
-    )
+async def test_vector_embed_429_fallback_or_retry(config):
+    # 👇 Make the client look like OpenAI: client.embeddings.create(...)
+    emb_client = SimpleNamespace(embeddings=_FlakyEmbeddings())
+    retr = AzureSearchRetriever(config, search_client=_NoopSearch(), embedding_client=emb_client)
+    with pytest.raises(RuntimeError):
+        await retr.search_vector("q")

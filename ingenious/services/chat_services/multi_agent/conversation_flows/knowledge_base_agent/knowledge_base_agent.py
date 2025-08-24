@@ -272,7 +272,6 @@ class ConversationFlow(IConversationFlow):
             raw_mode = "direct"
 
         coerced = False
-        mode: str
         if raw_mode in ("direct", "assist"):
             mode = raw_mode
         else:
@@ -280,17 +279,14 @@ class ConversationFlow(IConversationFlow):
             mode = "direct"
             coerced = True
 
-        # Create model client early (shared across modes); always closed in finally.
-        model_client = AzureClientFactory.create_openai_chat_completion_client(
-            model_config
-        )
+        # Lazily create chat client only when needed (assist mode). Direct mode doesn't need one.
+        model_client: Any | None = None
 
         try:
             use_azure_search = self._should_use_azure_search()
 
             if mode == "direct":
                 # When mode is coerced, we **ignore env overrides** but still **honor per-request** overrides.
-                top_k: int
                 if coerced:
                     override = (
                         self._resolve_topk_from_request(chat_request)
@@ -323,7 +319,10 @@ class ConversationFlow(IConversationFlow):
                     )
                     else ("Azure AI Search" if use_azure_search else "local ChromaDB")
                 )
-                context = f"Knowledge base search assistant using {backend_from_result} for finding information."
+                context = (
+                    "Knowledge base search assistant using "
+                    f"{backend_from_result} for finding information."
+                )
 
                 # Deterministic final message, with explicit "User question:" line.
                 header = f"Context: {context}\n\n"
@@ -352,83 +351,90 @@ class ConversationFlow(IConversationFlow):
 
             # --------- ASSIST MODE (optional) ---------
             # Use an agent to summarize/format based on tool results.
-            else:
-                use_azure_search = self._should_use_azure_search()
-                search_backend = (
-                    "Azure AI Search" if use_azure_search else "local ChromaDB"
+            # We need a chat client only in assist mode.
+            if model_client is None:
+                model_client = AzureClientFactory.create_openai_chat_completion_client(
+                    model_config
                 )
-                context = f"Knowledge base search assistant using {search_backend} for finding information."
+            use_azure_search = self._should_use_azure_search()
+            search_backend = "Azure AI Search" if use_azure_search else "local ChromaDB"
+            context = (
+                "Knowledge base search assistant using "
+                f"{search_backend} for finding information."
+            )
 
-                async def search_tool(search_query: str, topic: str = "general") -> str:
-                    """Tool function: Search KB using Azure or local Chroma based on policy."""
-                    top_k = self._get_top_k("assist", chat_request)
-                    return await self._search_knowledge_base(
-                        search_query=search_query,
-                        use_azure_search=use_azure_search,
-                        top_k=top_k,
-                        logger=base_logger,
-                    )
-
-                search_function_tool = FunctionTool(
-                    search_tool,
-                    description=f"Search for information using {search_backend}. Use relevant keywords to find relevant information.",
-                )
-
-                system_message = self._assist_system_message(memory_context)
-                search_assistant = AssistantAgent(
-                    name="search_assistant",
-                    system_message=system_message,
-                    model_client=model_client,
-                    tools=[search_function_tool],
-                    reflect_on_tool_use=True,
-                )
-
-                from autogen_agentchat.messages import TextMessage
-
-                user_msg = (
-                    f"Context: {context}\n\nUser question: {chat_request.user_prompt}"
-                    if context
-                    else chat_request.user_prompt
-                )
-
-                cancellation_token = CancellationToken()
-                response = await search_assistant.on_messages(
-                    messages=[TextMessage(content=user_msg, source="user")],
-                    cancellation_token=cancellation_token,
-                )
-
-                assistant_text = (
-                    self._to_text(response.chat_message.content)
-                    if getattr(response, "chat_message", None)
-                    else "No response generated"
-                )
-
-                # In assist mode we return the assistant's content verbatim.
-                final_message = assistant_text
-
-                total_tokens, completion_tokens = await self._safe_count_tokens(
-                    system_message=system_message,
-                    user_message=user_msg,
-                    assistant_message=final_message,
-                    model=model_config.model,
+            async def search_tool(search_query: str, topic: str = "general") -> str:
+                """Tool function: Search KB using Azure or local Chroma based on policy."""
+                top_k = self._get_top_k("assist", chat_request)
+                return await self._search_knowledge_base(
+                    search_query=search_query,
+                    use_azure_search=use_azure_search,
+                    top_k=top_k,
                     logger=base_logger,
                 )
 
-                return ChatResponse(
-                    thread_id=chat_request.thread_id or "",
-                    message_id=str(uuid.uuid4()),
-                    agent_response=final_message,
-                    token_count=total_tokens,
-                    max_token_count=completion_tokens,
-                    memory_summary=final_message,
-                )
+            search_function_tool = FunctionTool(
+                search_tool,
+                description=f"Search for information using {search_backend}. "
+                "Use relevant keywords to find relevant information.",
+            )
+
+            system_message = self._assist_system_message(memory_context)
+            search_assistant = AssistantAgent(
+                name="search_assistant",
+                system_message=system_message,
+                model_client=model_client,
+                tools=[search_function_tool],
+                reflect_on_tool_use=True,
+            )
+
+            from autogen_agentchat.messages import TextMessage
+
+            user_msg = (
+                f"Context: {context}\n\nUser question: {chat_request.user_prompt}"
+                if context
+                else chat_request.user_prompt
+            )
+
+            cancellation_token = CancellationToken()
+            response = await search_assistant.on_messages(
+                messages=[TextMessage(content=user_msg, source="user")],
+                cancellation_token=cancellation_token,
+            )
+
+            assistant_text = (
+                self._to_text(response.chat_message.content)
+                if getattr(response, "chat_message", None)
+                else "No response generated"
+            )
+
+            # In assist mode we return the assistant's content verbatim.
+            final_message = assistant_text
+
+            total_tokens, completion_tokens = await self._safe_count_tokens(
+                system_message=system_message,
+                user_message=user_msg,
+                assistant_message=final_message,
+                model=model_config.model,
+                logger=base_logger,
+            )
+
+            return ChatResponse(
+                thread_id=chat_request.thread_id or "",
+                message_id=str(uuid.uuid4()),
+                agent_response=final_message,
+                token_count=total_tokens,
+                max_token_count=completion_tokens,
+                memory_summary=final_message,
+            )
 
         finally:
             # Always close the model client (best-effort).
-            try:
-                await model_client.close()
-            except Exception:
-                pass
+            if model_client is not None:
+                try:
+                    await model_client.close()
+                except Exception:
+                    pass
             # Detach telemetry handler (best-effort).
             try:
                 if llm_logger:

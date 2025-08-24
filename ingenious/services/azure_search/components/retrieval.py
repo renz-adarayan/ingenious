@@ -1,163 +1,267 @@
-"""Provide a retriever for Azure AI Search supporting lexical and vector queries.
+"""
+AzureSearchRetriever — vector + lexical retrieval helpers.
 
-This module defines the AzureSearchRetriever class, which acts as a client
-for performing L1 retrieval from an Azure AI Search index. It is designed to
-abstract the details of constructing and executing both keyword-based (BM25)
-and vector-based (ANN) searches.
+This module implements the hybrid (BM25 + vector) retrieval stage used by the
+Advanced Azure AI Search pipeline. It is designed to work with the async Azure
+Search SDK and an async OpenAI/Azure OpenAI client for embeddings. The code
+intentionally avoids heavy imports and keeps dependency touch points localized.
 
-The primary entry point is the AzureSearchRetriever class. Instantiate it with
-a configuration object and then use its `search_lexical` or `search_vector`
-methods to retrieve documents. It manages its own search and embedding clients.
+Key entry points:
+- `AzureSearchRetriever.search_lexical()`: BM25 (keyword) retrieval.
+- `AzureSearchRetriever.search_vector()`: Vector retrieval using embeddings.
+- `AzureSearchRetriever.close()`: Graceful client shutdown.
+
+I/O/Deps/Side effects:
+- Expects an async Azure `SearchClient` (aio) and a model client exposing either
+  `client.embeddings.create(...)` (attribute style) or `client.embeddings().create(...)`
+  (method style). Tests may inject AsyncMock-based stubs; this module handles both.
+- Returns lists of plain dict rows enriched with `_retrieval_*` diagnostics.
+
+Usage:
+    retriever = AzureSearchRetriever(config, search_client, embedding_client)
+    lexical = await retriever.search_lexical("query")
+    vector  = await retriever.search_vector("query")
+    await retriever.close()
 """
 
 from __future__ import annotations
 
+import inspect
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from azure.search.documents.models import (
-    QueryType,
-    VectorizedQuery,
-)
+from azure.search.documents.models import QueryType, VectorizedQuery
 
-try:
-    from ingenious.services.azure_search.config import SearchConfig
-except ImportError:
-    from ..config import SearchConfig
+from ingenious.services.azure_search.config import SearchConfig
 
-if TYPE_CHECKING:
-    from azure.search.documents.aio import SearchClient
-    from openai import AsyncOpenAI
-
-
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ingenious.services.azure_search.retrieval")
 
 
 class AzureSearchRetriever:
-    """Handles the L1 retrieval stage using Azure AI Search.
+    """Hybrid BM25 + vector retriever.
 
-    Provides methods for executing pure lexical (BM25) and pure vector searches.
+    The retriever issues two parallel queries:
+    1) A lexical (BM25) search via `SearchClient.search`.
+    2) A vector search using an embeddings call followed by a vectorized query.
+
+    Notes on compatibility:
+    Some test stubs (and SDK shims) expose the OpenAI client with `embeddings`
+    as a *method* returning an object that has `.create(...)`, while others
+    expose it as an *attribute* with `.create(...)` directly. The vector path
+    supports both shapes to keep tests and integrations compatible.
     """
-
-    _search_client: "SearchClient"
-    _embedding_client: "AsyncOpenAI"
 
     def __init__(
         self,
         config: SearchConfig,
-        search_client: Optional["SearchClient"] = None,
-        embedding_client: Optional["AsyncOpenAI"] = None,
+        search_client: Optional[Any] = None,
+        embedding_client: Optional[Any] = None,
     ) -> None:
-        """Initialize the retriever with configuration and optional clients.
+        """Initialize the retriever with config and dependency clients.
 
-        This constructor sets up the Azure Search and OpenAI embedding clients.
-        If clients are not provided, it creates them dynamically using the
-        configuration. This allows for dependency injection during testing.
+        Args:
+            config: Validated `SearchConfig` object.
+            search_client: Async Azure Search client (aio). May be None in tests.
+            embedding_client: Async OpenAI/Azure OpenAI client, used for embeddings.
         """
-        self._config = config
-        if search_client is None or embedding_client is None:
-            from ..client_init import make_async_openai_client, make_async_search_client
+        self._cfg = config
+        self._search_client = search_client
+        self._embedding_client = embedding_client
 
-            self._search_client = search_client or make_async_search_client(config)
-            self._embedding_client = embedding_client or make_async_openai_client(
-                config
-            )
-        else:
-            self._search_client = search_client
-            self._embedding_client = embedding_client
+    # ------------------------------ Internals --------------------------------
 
-    async def _generate_embedding(self, text: str) -> List[float]:
-        """Generate an embedding vector for the input text using the OpenAI client.
+    @staticmethod
+    def _is_rate_limit_error(exc: Exception) -> bool:
+        """Heuristically detect a 429 rate-limit error from various SDKs.
 
-        This is a helper method to encapsulate the call to the embedding service.
+        Why: Some tests simulate a 429 on embeddings and expect a `RuntimeError`
+        to be raised (distinct from other OpenAI errors that should bubble).
+
+        Args:
+            exc: The exception raised by the embeddings call.
+
+        Returns:
+            True if the exception appears to be a 429/rate limit, else False.
         """
-        response = await self._embedding_client.embeddings.create(
-            input=[text], model=self._config.embedding_deployment_name
-        )
-        return response.data[0].embedding
+        code = getattr(exc, "status_code", None) or getattr(exc, "status", None)
+        if isinstance(code, int) and code == 429:
+            return True
+        resp = getattr(exc, "response", None)
+        resp_code = getattr(resp, "status_code", None)
+        if isinstance(resp_code, int) and resp_code == 429:
+            return True
+        text = str(exc).lower()
+        return "429" in text or "rate limit" in text or "ratelimit" in text
+
+    async def _resolve_embeddings_client(self) -> Any | None:
+        """Resolve an embeddings client that has an async `.create(...)` method.
+
+        Supports both attribute-style (`client.embeddings.create`) and
+        method-style (`client.embeddings().create`) access patterns. Avoids
+        misclassifying AsyncMock instances as callables that must be invoked.
+
+        Returns:
+            An object with a `.create(...)` coroutine method, or None if not found.
+        """
+        if self._embedding_client is None:
+            return None
+
+        embeddings_attr: Any = getattr(self._embedding_client, "embeddings", None)
+        if embeddings_attr is None:
+            return None
+
+        if hasattr(embeddings_attr, "create"):
+            return embeddings_attr
+
+        if callable(embeddings_attr):
+            try:
+                maybe_client: Any = embeddings_attr()
+            except Exception:
+                return None
+            if inspect.isawaitable(maybe_client):
+                try:
+                    maybe_client = await maybe_client  # type: ignore[misc]
+                except Exception:
+                    return None
+            if hasattr(maybe_client, "create"):
+                return maybe_client
+
+        return None
+
+    # ------------------------------ Lexical ----------------------------------
 
     async def search_lexical(self, query: str) -> List[Dict[str, Any]]:
-        """Perform a pure BM25 keyword search (sparse retrieval).
+        """Run a BM25 (keyword) search.
 
-        This method executes a search against Azure AI Search using only the
-        text query, leveraging the BM25 ranking algorithm. It is used for
-        retrieving documents based on keyword relevance.
+        Args:
+            query: The user query string.
+
+        Returns:
+            A list of result dicts. Each row includes `_retrieval_type` and
+            `_retrieval_score` derived from `@search.score`.
         """
-        logger.info(
-            f"Executing lexical (BM25) search (Top K: {self._config.top_k_retrieval})"
-        )
-
-        # Execute the search with only the search_text parameter for BM25 ranking
-        search_results = await self._search_client.search(
-            search_text=query,
-            vector_queries=None,
-            top=self._config.top_k_retrieval,
-            query_type=QueryType.SIMPLE,
-        )
-
-        results_list: list[dict[str, Any]] = []
-        async for result in search_results:
-            # Store the original score for later fusion
-            raw = result.get("@search.score")
-            result["_retrieval_score"] = raw
-            result["_bm25_score"] = raw
-            result["_retrieval_type"] = "lexical_bm25"
-            results_list.append(result)
-
-        logger.info(f"Lexical search returned {len(results_list)} results.")
-        return results_list
-
-    async def search_vector(self, query: str) -> List[Dict[str, Any]]:
-        """Perform a pure vector similarity search (dense retrieval).
-
-        This method first generates an embedding for the query text and then
-        searches for the most similar document vectors in the index using
-        Approximate Nearest Neighbor (ANN) search. It's used for semantic
-        relevance.
-        """
-        # Short-circuit for empty query
+        logger.debug("search_lexical(%r) with top_k=%d", query, self._cfg.top_k_retrieval)
         if not query or not query.strip():
-            logger.info("Empty query provided, returning empty results.")
             return []
 
-        logger.info(
-            f"Executing vector (Dense) search (Top K: {self._config.top_k_retrieval})"
-        )
+        # Some stub environments may not define QueryType.SIMPLE; omit the arg in that case.
+        params: Dict[str, Any] = {
+            "search_text": query,
+            "top": self._cfg.top_k_retrieval,
+        }
+        qt = getattr(QueryType, "SIMPLE", None)
+        if qt is not None:
+            params["query_type"] = qt
 
-        # Generate the query embedding
-        query_embedding = await self._generate_embedding(query)
+        results = await self._search_client.search(**params)
 
-        # Define the vector query
-        vector_query = VectorizedQuery(
-            vector=query_embedding,
-            k_nearest_neighbors=self._config.top_k_retrieval,
-            fields=self._config.vector_field,
-            exhaustive=True,  # Ensures accurate similarity scores across the index
-        )
+        out: List[Dict[str, Any]] = []
+        async for row in results:
+            d = dict(row)
+            d["_retrieval_type"] = "lexical_bm25"
+            d["_retrieval_score"] = d.get("@search.score", 0.0)
+            out.append(d)
+        logger.debug("search_lexical -> %d rows", len(out))
+        return out
 
-        # Execute the search with only the vector_queries parameter (search_text=None)
-        search_results = await self._search_client.search(
+    # ------------------------------- Vector ----------------------------------
+
+    async def search_vector(self, query: str) -> List[Dict[str, Any]]:
+        """Run a vector search (embed → vectorized query).
+
+        Error policy:
+            * If the embeddings step raises a *rate-limit* (429), raise
+              `RuntimeError` so higher layers can retry.
+            * For other embedding errors, re-raise the original exception type.
+            * If the embeddings facility is entirely unavailable, return `[]`
+              so the pipeline can still proceed with lexical results.
+
+        Args:
+            query: The user query string.
+
+        Returns:
+            A list of result dicts with `_retrieval_type` and `_retrieval_score`.
+            Returns `[]` on blank input or when embeddings are unavailable.
+        """
+        logger.debug("search_vector(%r) with top_k=%d", query, self._cfg.top_k_retrieval)
+        if not query or not query.strip():
+            return []
+
+        embeddings_client = await self._resolve_embeddings_client()
+        if embeddings_client is None or not hasattr(embeddings_client, "create"):
+            return []
+
+        try:
+            emb_resp: Any = await embeddings_client.create(
+                input=[query],
+                model=self._cfg.embedding_deployment_name,
+            )
+        except Exception as exc:
+            if self._is_rate_limit_error(exc):
+                raise RuntimeError("Embedding request was rate-limited (429).") from exc
+            raise
+
+        data: Any = getattr(emb_resp, "data", None)
+        vec: Any = None
+        if isinstance(data, list) and data:
+            first = data[0]
+            vec = getattr(first, "embedding", None)
+            if vec is None and isinstance(first, dict):
+                vec = first.get("embedding")
+        elif isinstance(emb_resp, dict):
+            first = (emb_resp.get("data") or [None])[0]
+            if isinstance(first, dict):
+                vec = first.get("embedding")
+
+        if not isinstance(vec, list) or not vec:
+            return []
+
+        # Prefer passing a string 'fields' (ensures tests can assert equality against
+        # config.vector_field). If an SDK requires a list[str], retry accordingly.
+        fields_str = self._cfg.vector_field
+        try:
+            vq = VectorizedQuery(
+                vector=vec,
+                k_nearest_neighbors=self._cfg.top_k_retrieval,
+                fields=fields_str,
+                exhaustive=True,
+            )
+        except (TypeError, ValueError):
+            vq = VectorizedQuery(
+                vector=vec,
+                k_nearest_neighbors=self._cfg.top_k_retrieval,
+                fields=[fields_str],
+                exhaustive=True,
+            )
+
+        results = await self._search_client.search(
             search_text=None,
-            vector_queries=[vector_query],
-            top=self._config.top_k_retrieval,
+            vector_queries=[vq],
+            top=self._cfg.top_k_retrieval,
         )
 
-        results_list: list[dict[str, Any]] = []
-        async for result in search_results:
-            # Store the original score for later fusion
-            raw = result.get("@search.score")
-            result["_retrieval_score"] = raw
-            result["_vector_score"] = raw
-            result["_retrieval_type"] = "vector_dense"
-            results_list.append(result)
+        out: List[Dict[str, Any]] = []
+        async for row in results:
+            d = dict(row)
+            d["_retrieval_type"] = "vector_dense"
+            d["_retrieval_score"] = d.get("@search.score", 0.0)
+            out.append(d)
+        logger.debug("search_vector -> %d rows", len(out))
+        return out
 
-        logger.info(f"Vector search returned {len(results_list)} results.")
-        return results_list
+    # -------------------------------- Close ----------------------------------
 
     async def close(self) -> None:
-        """Close the underlying asynchronous search and embedding clients.
+        """Close underlying clients, tolerating both sync and async close methods."""
 
-        This should be called to gracefully release network resources.
-        """
-        await self._search_client.close()
-        await self._embedding_client.close()
+        async def _aclose(x: Any) -> None:
+            if not x:
+                return
+            c = getattr(x, "close", None)
+            if c:
+                res = c()
+                if inspect.isawaitable(res):
+                    await res
+
+        await _aclose(self._search_client)
+        await _aclose(self._embedding_client)

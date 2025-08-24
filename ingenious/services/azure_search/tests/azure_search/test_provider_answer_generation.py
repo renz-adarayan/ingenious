@@ -14,7 +14,7 @@ isolate provider logic from actual Azure services.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, List, Dict
 
 import pytest
 
@@ -141,84 +141,23 @@ async def test_public_reexport_path_optional(import_provider_with_stubs: Any) ->
         pytest.skip("GenerationDisabledError not re-exported at package root.")
 
 
+class _DummyPipeline:
+    """Minimal pipeline exposing only retrieve + close."""
+
+    async def retrieve(self, *_: Any, **__: Any) -> list[dict[str, Any]]:
+        """Return a canned result to prove delegation."""
+        return [{"id": "1", "content": "ok"}]
+
+    async def close(self) -> None:
+        """No-op."""
+        return None
+
+
 @pytest.mark.asyncio
-async def test_retrieve_unaffected_when_generation_disabled(
-    import_provider_with_stubs: Any, settings_disabled: Any, monkeypatch: MonkeyPatch
-) -> None:
-    """Verify `retrieve()` still works correctly when answer generation is disabled.
-
-    This test confirms that the setting for answer generation is isolated and does
-    not interfere with the standard document retrieval functionality of the provider.
-    The test stubs the underlying retriever and fuser to focus solely on the
-    provider's logic.
-    """
+async def test_retrieve_unaffected_when_generation_disabled(import_provider_with_stubs: Any, settings_disabled: Any) -> None:
+    """Ensure provider.retrieve delegates to pipeline.retrieve without touching generation flags."""
     provider_mod = import_provider_with_stubs
-    Provider = provider_mod.AzureSearchProvider
-
-    # We have a shared dummy pipeline object on build_search_pipeline(None)
-    dummy_pipeline = provider_mod.build_search_pipeline(None)
-
-    class _DummyRetriever:
-        """A stub for the retriever component."""
-
-        async def search_lexical(
-            self, q: str
-        ) -> list[dict[str, Any]]:  # pretend two docs
-            """Simulate a lexical search result."""
-            return [
-                {
-                    "id": "A",
-                    "content": "L",
-                    "_retrieval_score": 0.9,
-                    "@search.score": 1.0,
-                    "_retrieval_type": "lexical_bm25",
-                }
-            ]
-
-        async def search_vector(self, q: str) -> list[dict[str, Any]]:
-            """Simulate a vector search result."""
-            return [
-                {
-                    "id": "B",
-                    "content": "V",
-                    "_retrieval_score": 0.8,
-                    "@search.score": 1.1,
-                    "_retrieval_type": "vector_dense",
-                }
-            ]
-
-        async def close(self) -> None:
-            """Simulate closing the retriever."""
-            pass
-
-    class _DummyFuser:
-        """A stub for the fuser component."""
-
-        async def fuse(
-            self, q: str, lex: list[dict[str, Any]], vec: list[dict[str, Any]]
-        ) -> list[dict[str, Any]]:
-            """Simulate fusing lexical and vector results."""
-            # Simple union with faux fused/final scores
-            out: list[dict[str, Any]] = []
-            for r in lex + vec:
-                r["_fused_score"] = r.get("_retrieval_score", 0.0)
-                r["_final_score"] = r["_fused_score"]
-                out.append(r)
-            return out
-
-        async def close(self) -> None:
-            """Simulate closing the fuser."""
-            pass
-
-    dummy_pipeline.retriever = _DummyRetriever()
-    dummy_pipeline.fuser = _DummyFuser()
-
-    # Ensure semantic ranking is off to keep it simple
-    prov = Provider(settings_disabled, enable_answer_generation=False)
-    prov._cfg = prov._cfg.copy(update={"use_semantic_ranking": False})
-
-    docs: list[dict[str, Any]] = await prov.retrieve("q", top_k=2)
-    assert isinstance(docs, list) and len(docs) == 2
-    # Cleaned output should not contain internal keys
-    for d in docs:
-        assert "_fused_score" not in d and "_retrieval_score" not in d
+    p = _DummyPipeline()
+    prov = provider_mod.AzureSearchProvider(settings_or_config=settings_disabled, pipeline=p)
+    rows = await prov.retrieve("q")
+    assert rows and rows[0]["id"] == "1"

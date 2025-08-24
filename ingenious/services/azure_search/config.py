@@ -12,6 +12,7 @@ instantiated to configure the search service.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Optional
 
 from pydantic import BaseModel, Field, SecretStr
@@ -127,6 +128,19 @@ class SearchConfig(BaseModel):
         False,
         description="If True, the pipeline will call the LLM to synthesize a final answer.",
     )
+
+    # Back-compat convenience accessor expected by some call sites/tests.
+    @property
+    def openai(self) -> SimpleNamespace:
+        """Compatibility shim exposing OpenAI settings as a namespace."""
+        key_val = self.openai_key.get_secret_value()
+        return SimpleNamespace(
+            endpoint=self.openai_endpoint,
+            key=key_val,
+            version=self.openai_version,
+            embedding_deployment_name=self.embedding_deployment_name,
+            generation_deployment_name=self.generation_deployment_name,
+        )
 
     class Config:
         """Pydantic model configuration.

@@ -1,60 +1,173 @@
-"""Create Azure AI service clients via the central factory (async)."""
+"""
+Create Azure AI service clients via the central factory (async).
+
+This module provides the single seam the codebase and tests patch to inject
+Azure clients. It deliberately keeps import-time light and avoids pulling the
+real SDKs unless a call site actually asks for a client.
+
+Why/what:
+- Prefer a module-level `AzureClientFactory` symbol when set (tests patch this).
+- Otherwise, lazily import the production factory
+  `ingenious.client.azure.AzureClientFactory`.
+- Normalize OpenAI client options (notably retries) with validation and safe
+  defaults, while dropping unknown kwargs to keep the surface stable.
+
+Key entry points (public API):
+- `make_async_search_client(cfg, **client_options)`
+- `make_async_openai_client(cfg, **client_options)`
+
+I/O/Deps/Side effects:
+- Depends on `ingenious.client.azure.AzureClientFactory` at runtime unless tests
+  patch `AzureClientFactory` here.
+- Unwraps `SecretStr` secrets at the call boundary to avoid leaking across layers.
+
+Usage:
+    search = make_async_search_client(cfg, retry_total=4)
+    openai = make_async_openai_client(cfg, max_retries=5, timeout=20.0)
+    ...
+    await search.close()
+    await openai.close()
+"""
 
 from __future__ import annotations
-from typing import Any, TYPE_CHECKING
+
+from typing import Any, Dict, Optional, TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from azure.search.documents.aio import SearchClient
     from openai import AsyncAzureOpenAI
     from .config import SearchConfig
 
-# Allow tests to monkeypatch either this symbol or the accessor.
-AzureClientFactory = None  # type: ignore
-__all__ = ["async_", "make_async_openai_client"]
+# ─────────────────────────────────────────────────────────────────────────────
+# Patch seam: tests set this to a dummy factory class with the same API.
+# If left as None, we import the production factory on demand.
+# ─────────────────────────────────────────────────────────────────────────────
+AzureClientFactory: Any | None = None  # patched by tests
 
-# Internal cache to avoid repeated imports; test can also patch this in place.
-_FACTORY_SINGLETON: Any | None = None
+__all__ = ["make_async_search_client", "make_async_openai_client"]
 
+
+import logging
+log = logging.getLogger("ingenious.services.azure_search.client_init")
 
 def _get_factory() -> Any:
-    """Return a factory class/obj, preferring a locally patched symbol if present."""
-    global _FACTORY_SINGLETON
     if AzureClientFactory is not None:
+        log.debug("Using patched AzureClientFactory: %s", AzureClientFactory)
         return AzureClientFactory
-    if _FACTORY_SINGLETON is None:
-        from ingenious.client.azure import AzureClientFactory as _F
-        _FACTORY_SINGLETON = _F
-    return _FACTORY_SINGLETON
+    from ingenious.client.azure import AzureClientFactory as _F  # type: ignore[import-not-found]
+    log.debug("Using production AzureClientFactory: %s", _F)
+    return _F
+
+def _normalize_openai_options(client_options: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize and validate options forwarded to the OpenAI client factory.
+
+    Behavior/contract (mirrors test expectations):
+    - Accept alias `retries` and map to `max_retries`.
+    - Apply a sane default of `max_retries=3` when not provided.
+    - Reject negative retry counts with `ValueError`.
+    - Drop unknown kwargs silently (keep surface stable).
+
+    Args:
+        client_options: Arbitrary keyword options supplied by callers.
+
+    Returns:
+        A sanitized dict containing only supported keys with validated values.
+
+    Raises:
+        ValueError: If `max_retries`/`retries` specifies a negative value.
+        ValueError: If a non-integer value is provided for retries.
+    """
+    # Supported pass-through options for the OpenAI client.
+    allowed_keys: set[str] = {
+        "max_retries",
+        "timeout",
+        "connect_timeout",
+        "read_timeout",
+        "transport",
+        "http_client",
+    }
+
+    out: Dict[str, Any] = {}
+
+    # Normalize retries (support alias and default).
+    raw_max = client_options.get("max_retries", client_options.get("retries", None))
+    if raw_max is None:
+        max_retries: int = 3
+    else:
+        max_retries = int(raw_max)  # may raise ValueError; let it bubble
+    if max_retries < 0:
+        raise ValueError("max_retries must be >= 0")
+    out["max_retries"] = max_retries
+
+    # Copy only allowed remaining options.
+    for k in allowed_keys:
+        if k == "max_retries":
+            continue
+        if k in client_options:
+            out[k] = client_options[k]
+
+    return out
 
 
 def make_async_search_client(cfg: "SearchConfig", **client_options: Any) -> "SearchClient":
-    """Create the async Azure Search client via AzureClientFactory.
+    """Create the async Azure Search client via the selected factory.
 
-    Any keyword args in `client_options` are forwarded to the underlying SDK ctor.
+    Any keyword args in `client_options` are forwarded verbatim to the underlying SDK
+    constructor through the factory. The Azure Search SDK usually validates these.
+
+    Args:
+        cfg: Validated `SearchConfig`.
+        **client_options: Optional Azure SDK configuration (timeouts, retries, etc.).
+
+    Returns:
+        An instance of the async `SearchClient`.
     """
     factory = _get_factory()
-    return factory.create_async_search_client(
-        index_name=cfg.search_index_name,
-        config={
-            "endpoint": cfg.search_endpoint,
-            "search_key": cfg.search_key.get_secret_value(),  # unwrap SecretStr
-        },
-        **client_options,
+    return cast(
+        "SearchClient",
+        factory.create_async_search_client(
+            index_name=cfg.search_index_name,
+            config={
+                "endpoint": cfg.search_endpoint,
+                "search_key": cfg.search_key.get_secret_value(),  # unwrap SecretStr
+            },
+            **client_options,
+        ),
     )
 
-def make_async_openai_client(cfg: "SearchConfig", **client_options: Any) -> "AsyncAzureOpenAI":
-    """Create the async Azure OpenAI client via AzureClientFactory.
 
-    Any keyword args in `client_options` are forwarded to the underlying SDK ctor.
-    We default max_retries to 3 if not provided (keeps tests and sensible prod default).
+def make_async_openai_client(cfg: "SearchConfig", **client_options: Any) -> "AsyncAzureOpenAI":
+    """Create the async Azure OpenAI client via the selected factory.
+
+    Behavior:
+    - Applies a sane default retry policy (`max_retries=3`) unless overridden.
+    - Accepts alias `retries` and maps it to `max_retries`.
+    - Drops unknown kwargs to keep a stable factory/SDK surface.
+    - Validates that retries are non-negative.
+
+    Args:
+        cfg: Validated `SearchConfig`.
+        **client_options: Optional OpenAI client options. Supported keys include:
+            - max_retries (int), retries (alias), timeout (float),
+              connect_timeout (float), read_timeout (float), transport/http_client.
+
+    Returns:
+        An instance of `AsyncAzureOpenAI`.
+
+    Raises:
+        ValueError: If a negative retry count is provided or parsing fails.
     """
     factory = _get_factory()
+    normalized: Dict[str, Any] = _normalize_openai_options(dict(client_options))
 
-    return factory.create_async_openai_client(
-        config={
-            "openai_endpoint": cfg.openai_endpoint,
-            "openai_key": cfg.openai_key.get_secret_value(),  # unwrap SecretStr
-        },
-        api_version=cfg.openai_version,
-        **client_options,
+    return cast(
+        "AsyncAzureOpenAI",
+        factory.create_async_openai_client(
+            config={
+                "openai_endpoint": cfg.openai_endpoint,
+                "openai_key": cfg.openai_key.get_secret_value(),  # unwrap SecretStr
+            },
+            api_version=cfg.openai_version,
+            **normalized,
+        ),
     )

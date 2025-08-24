@@ -56,6 +56,7 @@ class DynamicRankFuser:
         """
         self._config = config
         self._llm_client: AsyncOpenAI
+        self._owns_llm: bool = llm_client is None
         self._alpha_cache: dict[str, float] = {}
         if llm_client is None:
             from ..client_init import make_async_openai_client
@@ -415,4 +416,5 @@ Question: {query}
         Why: This is important for graceful shutdown, ensuring that network
         connections are properly terminated.
         """
-        await self._llm_client.close()
+        if self._owns_llm:
+            await self._llm_client.close()

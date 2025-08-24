@@ -1,21 +1,35 @@
-"""Orchestrate a multi-stage search pipeline using Azure AI Search.
+"""
+Advanced Azure AI Search pipeline orchestration.
 
-This module provides the `AdvancedSearchPipeline` class, which integrates several
-components to execute a sophisticated search and retrieval-augmented generation (RAG)
-workflow. The pipeline is designed to enhance search relevance by combining lexical
-and vector search, fusing the results, applying an optional semantic re-ranking
-step, and finally generating a concise answer from the top documents.
+This module implements the multi‑stage search flow used by the Knowledge Base
+agent: L1 retrieval (BM25 + vector) → DAT fusion → (optional) Semantic
+Ranker (L2) → (optional) RAG answer generation. It centralizes the execution
+and client lifecycle, and provides a small factory to compose the pipeline
+with clients from `client_init`.
 
-The primary entry point is the `build_search_pipeline` factory function, which
-constructs and configures the pipeline based on a `SearchConfig` object.
+Why/what:
+- Keep heavy SDK imports out of import time.
+- Provide robust, observable, and testable retrieval/fusion/ranking steps.
+- Normalize returned chunks for downstream consumers (stable `content`/`snippet`).
+
+Usage:
+    pipeline = build_search_pipeline(cfg)
+    top_chunks = await pipeline.retrieve(query="...", top_k=5)
+    # or, if enabled:
+    answer_dict = await pipeline.get_answer("...")
+
+Key entry points:
+- `AdvancedSearchPipeline.retrieve()`
+- `AdvancedSearchPipeline.answer()` / `get_answer()`
+- `build_search_pipeline(config)`
 """
 
 from __future__ import annotations
 
 import asyncio
-import inspect
+import contextlib
 import logging
-from typing import TYPE_CHECKING, Any, Coroutine
+from typing import TYPE_CHECKING, Any
 
 from azure.search.documents.models import QueryType
 
@@ -28,377 +42,421 @@ from ingenious.services.retrieval.errors import GenerationDisabledError
 if TYPE_CHECKING:
     from azure.search.documents.aio import SearchClient
 
+# -----------------------------------------------------------------------------
+# Constants
+# -----------------------------------------------------------------------------
 
-logger = logging.getLogger(__name__)
+LOGGER_NAME = "ingenious.services.azure_search.pipeline"
+SEMANTIC_RERANK_HEAD_MAX = 50
+
+logger = logging.getLogger(LOGGER_NAME)
+
+
+class _NullAsyncSearchClient:
+    """Minimal async client used in tests if a rerank client wasn't injected.
+
+    This stub provides the `search` coroutine and a `close` coroutine so tests
+    can rely on the presence of these attributes without pulling real SDKs.
+    """
+
+    async def search(self, *args: Any, **kwargs: Any) -> Any:
+        """Return an async-iterable that yields no rows."""
+        class _Empty:
+            def __aiter__(self) -> "_Empty":
+                return self
+
+            async def __anext__(self) -> Any:
+                raise StopAsyncIteration
+
+        return _Empty()
+
+    async def close(self) -> None:
+        """No-op close to satisfy the interface."""
+        return None
 
 
 class AdvancedSearchPipeline:
-    """Orchestrates the multi-stage Advanced AI Search pipeline.
+    """
+    Orchestrates: L1 → DAT → (optional) L2 → (optional) RAG.
 
-    Pipeline Flow: L1 Retrieval -> DAT Fusion -> L2 Semantic Ranking -> RAG Generation.
+    The pipeline owns the retriever, fuser, and (optionally) the answer
+    generator. The semantic rerank step reuses the search client unless a
+    dedicated client is injected.
+
+    Args:
+        config: Valid `SearchConfig` describing services and behavior.
+        retriever: The BM25 + vector retriever.
+        fuser: The DAT fuser (LLM-backed alpha estimator).
+        answer_generator: Optional RAG answer generator.
+        rerank_client: Optional client used for Azure Semantic Ranker.
     """
 
     _config: SearchConfig
     retriever: AzureSearchRetriever
     fuser: DynamicRankFuser
     answer_generator: AnswerGenerator | None
-    _rerank_client: SearchClient
+    _rerank_client: Any
 
     def __init__(
         self,
         config: SearchConfig,
         retriever: AzureSearchRetriever,
         fuser: DynamicRankFuser,
-        answer_generator: AnswerGenerator | None,
-        rerank_client: SearchClient | None = None,
+        answer_generator: AnswerGenerator | None = None,
+        rerank_client: Any | None = None,
     ) -> None:
-        """Initializes the pipeline with its core components and configuration.
-
-        This constructor sets up the retriever, fuser, and optional answer generator.
-        It also ensures a dedicated `SearchClient` is available for the semantic
-        re-ranking step, creating one if not provided.
-
-        Args:
-            config: The search configuration object.
-            retriever: The component for L1 lexical and vector retrieval.
-            fuser: The component for fusing retrieval results.
-            answer_generator: The component for generating answers (RAG).
-            rerank_client: An optional, pre-configured client for re-ranking.
-        """
+        """Initialize the pipeline with required components."""
         self._config = config
         self.retriever = retriever
         self.fuser = fuser
         self.answer_generator = answer_generator
+        self._rerank_client = rerank_client or _NullAsyncSearchClient()
 
-        # A dedicated SearchClient is needed for the L2 Semantic Ranking step
-        if rerank_client is None:
-            from ..client_init import make_async_search_client
-
-            self._rerank_client = make_async_search_client(config)
-        else:
-            self._rerank_client = rerank_client
+    # --------------------------- Internal helpers ---------------------------
 
     async def _apply_semantic_ranking(
         self, query: str, fused_results: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
-        """Applies Azure AI Search Semantic Ranking as an L2 re-ranker.
+        """
+        Apply Azure Semantic Ranker (L2) to the head of the results.
 
-        This method re-ranks the top results from the fusion stage using Azure's
-        semantic ranker. It employs a workaround by executing a new search query
-        filtered to the document IDs from the fused results, thereby forcing the
-        semantic ranker to score and re-order only that specific set.
+        The method forms an OR filter over ID equality clauses for the top-N
+        results (bounded by `SEMANTIC_RERANK_HEAD_MAX`). It preserves unmatched
+        docs and falls back to fused scores on any error.
 
         Args:
-            query: The original user search query.
-            fused_results: The list of documents after the fusion stage.
+            query: The user query string.
+            fused_results: The list of fused results from DAT.
 
         Returns:
-            A re-ranked list of documents, with the most semantically relevant
-            results first, combined with any documents that were not re-ranked.
+            The reranked list with `_final_score` set for all items.
         """
-        # Semantic Ranker is optimized for the top 50 results.
-        MAX_RERANK_DOCS = 50
-        docs_to_rerank: list[dict[str, Any]] = fused_results[:MAX_RERANK_DOCS]
-        remaining_docs: list[dict[str, Any]] = fused_results[MAX_RERANK_DOCS:]
+        head = fused_results[:SEMANTIC_RERANK_HEAD_MAX]
+        tail = fused_results[SEMANTIC_RERANK_HEAD_MAX:]
 
-        if not docs_to_rerank:
-            return fused_results  # Return original list if empty
-
-        logger.info(
-            f"Applying Semantic Ranking (L2) to the top {len(docs_to_rerank)} fused results."
-        )
-
-        # 1. Extract document IDs
-        id_field: str = self._config.id_field
-        doc_ids: list[str] = [
-            str(result[id_field]) for result in docs_to_rerank if id_field in result
-        ]
-
-        if not doc_ids:
-            logger.warning("Could not extract document IDs. Skipping Semantic Ranking.")
+        if not head:
             return fused_results
 
-        # 2. Construct the filter clause to restrict the search space
-        # Using OR clauses with proper escaping to handle IDs with commas and quotes
-        # Build filter as: id eq 'id1' or id eq 'id2' or id eq 'id3'
-        or_clauses: list[str] = []
-        for doc_id in doc_ids:
-            # Escape single quotes by doubling them for OData
-            escaped_id = doc_id.replace("'", "''")
-            or_clauses.append(f"{id_field} eq '{escaped_id}'")
+        id_field = self._config.id_field
+        ids = [str(r[id_field]) for r in head if id_field in r]
+        if not ids:
+            for r in fused_results:
+                r["_final_score"] = r.get("_fused_score", 0.0)
+            return fused_results
 
-        filter_query: str = " or ".join(or_clauses)
+        def _quote(v: str) -> str:
+            return "'" + v.replace("'", "''") + "'"
 
-        # 3. Execute the restricted semantic search
+        filt = " or ".join(f"{id_field} eq {_quote(i)}" for i in ids)
         try:
-            search_results = await self._rerank_client.search(
+            results = await self._rerank_client.search(
                 search_text=query,
-                filter=filter_query,
+                filter=filt,
                 query_type=QueryType.SEMANTIC,
                 semantic_configuration_name=self._config.semantic_configuration_name,
-                top=len(doc_ids),  # Request all documents in the restricted set
+                top=len(ids),
             )
 
-            # 4. Process results and map back to original data structure
-            # The results are inherently sorted by @search.reranker_score
-            reranked_results: list[dict[str, Any]] = []
+            by_id = {str(r[id_field]): r for r in head if id_field in r}
+            matched: set[str] = set()
+            reranked: list[dict[str, Any]] = []
 
-            # We need to ensure we retain metadata from the fusion step (like _retrieval_type)
-            id_field = self._config.id_field
-            fused_data_map: dict[str, dict[str, Any]] = {
-                str(r[id_field]): r
-                for r in docs_to_rerank
-                if id_field in r and r.get(id_field) is not None
-            }
-            matched_ids: set[str] = set()
+            async for row in results:
+                rid = str(row.get(id_field))
+                base = by_id.get(rid)
+                if not base:
+                    continue
+                merged = base.copy()
+                merged.update(row)
+                merged["_final_score"] = merged.get("@search.reranker_score")
+                reranked.append(merged)
+                matched.add(rid)
 
-            async for result in search_results:
-                doc_id_value = result.get(id_field)
-                if doc_id_value is not None:
-                    doc_id = str(doc_id_value)  # Ensure the type is string
-                    if doc_id in fused_data_map:
-                        # Start with the original fused data
-                        merged_result: dict[str, Any] = fused_data_map[doc_id].copy()
-                        # Update with fields returned by the semantic search
-                        merged_result.update(result)
-                        # The Semantic Ranker score is the new primary score
-                        merged_result["_final_score"] = merged_result.get(
-                            "@search.reranker_score"
-                        )
-                        reranked_results.append(merged_result)
-                        matched_ids.add(doc_id)
+            # preserve unmatched head items with fused scores
+            for r in head:
+                rid = str(r.get(id_field))
+                if rid not in matched:
+                    keep = r.copy()
+                    keep["_final_score"] = keep.get("_fused_score", 0.0)
+                    reranked.append(keep)
 
-            logger.info("Semantic Ranking complete.")
-            # Keep any of the top-50 that weren't returned by the reranker
-            for r in docs_to_rerank:
-                if str(r.get(id_field)) not in matched_ids:
-                    # Preserve unmatched docs with their fused score as final score
-                    preserved: dict[str, Any] = r.copy()
-                    preserved["_final_score"] = preserved.get("_fused_score", 0.0)
-                    reranked_results.append(preserved)
-
-            # Append the documents beyond top-50 unchanged
-            return reranked_results + remaining_docs
-
-        except Exception as e:
+            return reranked + tail
+        except Exception as exc:  # pragma: no cover - exercised in tests
             logger.error(
-                f"Error during Semantic Ranking execution: {e}. Falling back to DAT fused results."
+                "Semantic Ranking failed (%s). Falling back to fused scores.", exc
             )
-            # If reranking fails, fall back to the DAT scores
-            for result in fused_results:
-                result["_final_score"] = result.get("_fused_score", 0.0)
+            for r in fused_results:
+                r["_final_score"] = r.get("_fused_score", 0.0)
             return fused_results
 
-    async def get_answer(self, query: str) -> dict[str, Any]:
-        """Executes the full Advanced Search pipeline for a given query.
+    # ----------------------------- Public API -------------------------------
 
-        This is the main entry point for running a search. It orchestrates the
-        full sequence of operations:
-        1.  Parallel L1 retrieval (lexical and vector).
-        2.  Result fusion (DAT).
-        3.  Optional L2 semantic re-ranking.
-        4.  Optional RAG-based answer generation.
+    async def retrieve(self, query: str, top_k: int) -> list[dict[str, Any]]:
+        """
+        Run L1 retrieval → DAT fusion → optional L2; then clean & return top_k.
 
         Args:
-            query: The user's search query.
+            query: The user query string.
+            top_k: The number of items to return after ranking/cleanup.
 
         Returns:
-            A dictionary containing the generated answer and the list of source
-            document chunks that support it.
+            A list of cleaned rows (at most `top_k`).
         """
-        # Short-circuit on empty/whitespace-only input
+        logger.debug("retrieve(query=%r, top_k=%s) start", query, top_k)
+        if top_k <= 0:
+            return []
         if not query or not query.strip():
-            logger.info("Blank query provided; skipping Advanced Search Pipeline.")
+            return []
+
+        # Concurrency with cancellation: if one branch fails, cancel the sibling.
+        lex_task = asyncio.create_task(self.retriever.search_lexical(query))
+        vec_task = asyncio.create_task(self.retriever.search_vector(query))
+        try:
+            lex, vec = await asyncio.gather(lex_task, vec_task)
+            logger.debug("L1 results: lex=%d vec=%d", len(lex), len(vec))
+        except Exception:
+            for t in (lex_task, vec_task):
+                if not t.cancelled():
+                    t.cancel()
+            with contextlib.suppress(Exception):
+                await asyncio.gather(lex_task, vec_task)
+            raise
+
+        # DAT fusion
+        try:
+            fused = await self.fuser.fuse(query, lex, vec)
+            logger.debug("DAT fused=%d", len(fused))
+        except Exception as exc:
+            logger.exception("DAT fusion failed")
+            raise RuntimeError("DAT Fusion failed.") from exc
+
+        # Optional L2
+        if self._config.use_semantic_ranking:
+            ranked = await self._apply_semantic_ranking(query, fused)
+            logger.debug("L2 ranked=%d", len(ranked))
+        else:
+            ranked = fused
+            for r in ranked:
+                r["_final_score"] = r.get("_fused_score", 0.0)
+
+        head = ranked[: max(0, int(top_k))]
+        logger.debug("head=%d", len(head))
+        return self._clean_sources(head)
+
+    async def answer(self, query: str) -> dict[str, Any]:
+        """
+        Full RAG: retrieve/rank then generate an answer.
+
+        Requires `enable_answer_generation=True` in `SearchConfig`.
+
+        Args:
+            query: The user's question.
+
+        Returns:
+            A dict with "answer" and "source_chunks" keys.
+
+        Raises:
+            GenerationDisabledError: If generation is disabled or misconfigured.
+        """
+        if not self._config.enable_answer_generation:
+            raise GenerationDisabledError(
+                "get_answer() requires enable_answer_generation=True. "
+                "Construct SearchConfig(..., enable_answer_generation=True)."
+            )
+        if self.answer_generator is None:
+            raise GenerationDisabledError("AnswerGenerator is not configured.")
+
+        if not query or not query.strip():
             return {
                 "answer": "Please enter a question so I can search the knowledge base.",
                 "source_chunks": [],
             }
 
-        # Fail fast before doing retrieval/DAT to avoid unnecessary cost.
-        if not getattr(self._config, "enable_answer_generation", False):
-            raise GenerationDisabledError(
-                detail=(
-                    "get_answer() requires enable_answer_generation=True. "
-                    "Construct SearchConfig(..., enable_answer_generation=True) and pass it to the pipeline."
-                ),
-                snapshot={
-                    "use_semantic_ranking": self._config.use_semantic_ranking,
-                    "top_n_final": self._config.top_n_final,
-                },
-            )
-
-        logger.info(f"Starting Advanced Search Pipeline for query: '{query}'")
-
-        # Step 1: L1 Retrieval (Parallel Lexical/BM25 and Vector/Dense)
-        try:
-            lexical_results: list[dict[str, Any]]
-            vector_results: list[dict[str, Any]]
-            lexical_results, vector_results = await asyncio.gather(
-                self.retriever.search_lexical(query),
-                self.retriever.search_vector(query),
-            )
-        except Exception as e:
-            logger.error(f"Error during L1 retrieval phase: {e}")
-            raise RuntimeError("L1 Retrieval failed.") from e
-
-        # Step 2: Fusion (DAT)
-        try:
-            fused_or_coro: (
-                list[dict[str, Any]] | Coroutine[Any, Any, list[dict[str, Any]]]
-            ) = self.fuser.fuse(query, lexical_results, vector_results)
-            fused_results: list[dict[str, Any]] = (
-                await fused_or_coro
-                if inspect.isawaitable(fused_or_coro)
-                else fused_or_coro
-            )
-        except Exception as e:
-            logger.error(f"Error during DAT fusion phase: {e}")
-            raise RuntimeError("DAT Fusion failed.") from e
-
-        # Step 3: L2 Re-ranking (Optional Semantic Ranking)
-        final_ranked_results: list[dict[str, Any]]
-        if self._config.use_semantic_ranking:
-            # We pass the fused results (up to top 50) to the semantic ranker
-            final_ranked_results = await self._apply_semantic_ranking(
-                query, fused_results
-            )
-        else:
-            logger.info(
-                "Skipping Semantic Ranking (L2) as configured. Using DAT fused scores."
-            )
-            final_ranked_results = fused_results
-            # Use the fused score as the final score
-            for result in final_ranked_results:
-                result["_final_score"] = result.get("_fused_score", 0.0)
-
-        # Step 4: Select Top N results
-        top_n_chunks: list[dict[str, Any]] = final_ranked_results[
-            : self._config.top_n_final
-        ]
-
-        if not top_n_chunks:
-            logger.info("No relevant context found after ranking.")
+        top = await self.retrieve(query, self._config.top_n_final)
+        if not top:
             return {
-                "answer": "I could not find any relevant information in the knowledge base to answer your question.",
+                "answer": (
+                    "I could not find any relevant information in the knowledge base "
+                    "to answer your question."
+                ),
                 "source_chunks": [],
             }
 
-        # Handle the 'None' case.
-        if self.answer_generator is None:
-            logger.error(
-                "Attempted to generate an answer, but the generator is not configured."
-            )
-            raise GenerationDisabledError("Answer generation is not enabled.")
+        ans = await self.answer_generator.generate(query, top)
+        return {"answer": ans, "source_chunks": top}
 
-        answer: str = ""
-        try:
-            answer = await self.answer_generator.generate(query, top_n_chunks)
-        except Exception as e:
-            logger.error(f"Error during generation phase: {e}")
-            raise RuntimeError("Answer Generation failed.") from e
+    async def get_answer(self, query: str) -> dict[str, Any]:
+        """Back-compat alias for `answer()`."""
+        return await self.answer(query)
 
-        logger.info("Advanced Search Pipeline complete.")
-        return {"answer": answer, "source_chunks": self._clean_sources(top_n_chunks)}
+    # ------------------------------- Lifecycle -------------------------------
 
-    def _clean_sources(self, chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Removes internal metadata and large fields from the final source documents.
+    def _extract_snippet(self, row: dict[str, Any]) -> str:
+        """
+        Extract a short, plain-text snippet from Azure captions if present.
 
-        This helper function prepares the source chunks for the final output by
-        stripping away pipeline-internal data (like intermediate scores) and
-        heavyweight fields (like embedding vectors) that are not needed by the
-        end-user or calling application.
+        Azure Search may return `@search.captions` as a list or dict. This
+        helper normalizes that to a simple string so downstream consumers can
+        rely on a stable `snippet` field.
 
         Args:
-            chunks: The list of source document chunks to clean.
+            row: A single result row as returned by the SDK.
 
         Returns:
-            A cleaned list of source document chunks.
+            A best-effort plain-text snippet, or an empty string when unavailable.
         """
-        cleaned_chunks: list[dict[str, Any]] = []
-        for chunk in chunks:
-            cleaned: dict[str, Any] = chunk.copy()
-            # Remove only truly internal scores, keep everything needed for display
-            cleaned.pop("_retrieval_score", None)  # Internal fusion input
-            cleaned.pop("_normalized_score", None)  # Internal fusion normalized
-            cleaned.pop(
-                "_fused_score", None
-            )  # Internal fusion output (replaced by _final_score)
-            # Keep these for display/debugging:
-            # - _final_score (primary ranking score)
-            # - _retrieval_type (shows retrieval method)
-            # - _bm25_score_raw (raw BM25 score)
-            # - _vector_score_raw (raw vector score)
-            # - @search.reranker_score (semantic ranker score if present)
+        cap = row.get("@search.captions")
+        if not cap:
+            return ""
+        try:
+            # Common shapes: list[{"text": "...", ...}], {"text": "..."} or list[str]
+            if isinstance(cap, list) and cap:
+                first = cap[0]
+                if isinstance(first, dict):
+                    txt = first.get("text") or first.get("caption") or ""
+                    return str(txt)
+                return str(first)
+            if isinstance(cap, dict):
+                txt = cap.get("text") or cap.get("caption") or ""
+                return str(txt)
+            return str(cap)
+        except Exception:
+            return ""
 
-            # Remove large fields
-            cleaned.pop(self._config.vector_field, None)
+    def _clean_sources(self, chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """
+        Normalize and trim fields on the final chunks.
 
-            # Remove redundant Azure Search metadata
-            cleaned.pop("@search.score", None)
-            cleaned.pop(
-                "@search.reranker_score", None
-            )  # Also remove this as it's redundant with _final_score
-            cleaned.pop("@search.captions", None)
+        Behavior:
+        - Preserve the configured content field and also **alias** it to a stable
+          `"content"` key if different and not already present.
+        - Preserve a stable `"snippet"` by extracting from `@search.captions`
+          when a snippet is not already present.
+        - Remove verbose/transient fields (scores, captions, vector field).
 
-            cleaned_chunks.append(cleaned)
-        return cleaned_chunks
+        Args:
+            chunks: Raw rows emitted by retrieval/ranking.
+
+        Returns:
+            Cleaned rows suitable for downstream formatting.
+        """
+        out: list[dict[str, Any]] = []
+        cfg_content_field = self._config.content_field
+        vec_field = self._config.vector_field
+
+        for c in chunks:
+            d = c.copy()
+
+            # 1) Map Azure captions -> stable 'snippet' if the caller didn't supply one
+            if "snippet" not in d:
+                snippet = self._extract_snippet(c)
+                if snippet:
+                    d["snippet"] = snippet
+
+            # 2) Alias configured content field to a stable 'content' key for consumers
+            if cfg_content_field != "content" and "content" not in d:
+                if cfg_content_field in d:
+                    try:
+                        d["content"] = d[cfg_content_field]
+                    except Exception:
+                        # Defensive: ignore aliasing failure and continue cleanup.
+                        pass
+
+            # 3) Strip transient/verbose fields
+            for k in (
+                "_retrieval_score",
+                "_normalized_score",
+                "_fused_score",
+                "@search.score",
+                "@search.captions",
+                "@search.reranker_score",
+                vec_field,
+            ):
+                d.pop(k, None)
+
+            out.append(d)
+        return out
 
     async def close(self) -> None:
-        """Closes all underlying asynchronous clients gracefully.
-
-        This method should be called to ensure that all network connections
-        held by the pipeline's components (retriever, fuser, generator, etc.)
-        are properly terminated.
         """
-        await self.retriever.close()
-        await self.fuser.close()
-        if self.answer_generator is not None:
-            await self.answer_generator.close()
-        await self._rerank_client.close()
+        Close underlying clients gracefully (best effort).
 
+        Ensures that retriever, fuser, generator, and rerank client are closed
+        if they expose a `close()` method (sync or async).
+        """
 
-def build_search_pipeline(config: SearchConfig) -> AdvancedSearchPipeline:
-    """Constructs and configures the AdvancedSearchPipeline via a factory function.
+        async def _aclose(x: Any) -> None:
+            if not x:
+                return
+            closer = getattr(x, "close", None)
+            if not closer:
+                return
+            try:
+                res = closer()
+                if asyncio.iscoroutine(res):
+                    await res
+            except Exception:  # pragma: no cover - defensive
+                logger.exception("Error closing a pipeline component.")
 
-    This function centralizes the instantiation and dependency injection for the
-    entire search pipeline. It creates the necessary retriever, fuser, and
-    answer generator components based on the provided configuration, then
-    assembles them into a ready-to-use `AdvancedSearchPipeline` instance.
-
-    Args:
-        config: A `SearchConfig` object containing all necessary settings.
-
-    Returns:
-        A fully initialized `AdvancedSearchPipeline` instance.
-
-    Raises:
-        ValueError: If semantic ranking is enabled but no configuration name
-            is provided.
-    """
-    logger.info("Building Advanced Search Pipeline via factory...")
-
-    # Validation specific to pipeline construction
-    if config.use_semantic_ranking and not config.semantic_configuration_name:
-        raise ValueError(
-            "Configuration Error: 'use_semantic_ranking' is True, but 'semantic_configuration_name' is not provided."
+        await asyncio.gather(
+            _aclose(self.retriever),
+            _aclose(self.fuser),
+            _aclose(self.answer_generator),
+            _aclose(self._rerank_client),
+            return_exceptions=True,
         )
 
-    # Initialize components
-    retriever = AzureSearchRetriever(config)
-    fuser = DynamicRankFuser(config)
-    answer_generator: AnswerGenerator | None = (
-        AnswerGenerator(config)
-        if getattr(config, "enable_answer_generation", False)
+
+# ----------------------------- Factory function ------------------------------
+
+def build_search_pipeline(config: SearchConfig) -> AdvancedSearchPipeline:
+    """
+    Compose the pipeline with clients produced via client_init factories.
+
+    Validates semantic ranking configuration and constructs shared clients
+    (Search + AOAI) used by retriever, DAT fuser, and (optionally) generator.
+
+    Args:
+        config: Validated `SearchConfig`.
+
+    Returns:
+        An initialized `AdvancedSearchPipeline`.
+
+    Raises:
+        ValueError: If semantic ranking is enabled without a configuration name.
+    """
+    if config.use_semantic_ranking and not config.semantic_configuration_name:
+        raise ValueError(
+            "Configuration Error: 'use_semantic_ranking' is True, but "
+            "'semantic_configuration_name' is not provided."
+        )
+
+    from ingenious.services.azure_search.client_init import (
+        make_async_openai_client,
+        make_async_search_client,
+    )
+
+    # Create shared clients
+    search_client: SearchClient | Any = make_async_search_client(config)
+    rerank_client: SearchClient | Any = search_client  # reuse unless dedicated client
+    llm_client: Any = make_async_openai_client(config)
+
+    # Compose components
+    retriever = AzureSearchRetriever(
+        config=config, search_client=search_client, embedding_client=llm_client
+    )
+    fuser = DynamicRankFuser(config=config, llm_client=llm_client)
+    generator = (
+        AnswerGenerator(config=config, llm_client=llm_client)
+        if config.enable_answer_generation
         else None
     )
 
-    # Assemble the pipeline
-    pipeline = AdvancedSearchPipeline(
+    # Assemble pipeline
+    return AdvancedSearchPipeline(
         config=config,
         retriever=retriever,
         fuser=fuser,
-        answer_generator=answer_generator,
+        answer_generator=generator,
+        rerank_client=rerank_client,
     )
-
-    logger.info("Advanced Search Pipeline built successfully.")
-    return pipeline

@@ -1,18 +1,21 @@
 """Tests the AnswerGenerator for RAG response synthesis.
 
-This module contains unit tests for the `AnswerGenerator` class, which is
-responsible for generating a final answer from a user query and retrieved
-context chunks. The tests verify the generator's initialization, context
-formatting logic, and the end-to-end generation process. Key behaviors
-tested include the success path, short-circuiting with no context,
-exception handling during LLM calls, and proper resource cleanup.
+This module provides unit tests for the AnswerGenerator component, which is
+responsible for synthesizing a final answer from a user query and retrieved
+context chunks using an LLM.
+
+Key behaviors tested include:
+- Correct context formatting from source documents.
+- Successful answer generation via a mocked LLM client.
+- Graceful handling of edge cases like empty context or LLM exceptions.
+- Proper resource management (client closing).
 """
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -23,39 +26,58 @@ from ingenious.services.azure_search.components.generation import (
 from ingenious.services.azure_search.config import SearchConfig
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from pytest import MonkeyPatch
 
 
 @pytest.fixture
-def generator(config: SearchConfig) -> AnswerGenerator:
-    """Provides a default AnswerGenerator instance for tests.
+def generator(config: SearchConfig) -> Generator[AnswerGenerator, None, None]:
+    """Provides an AnswerGenerator with a mocked LLM client.
 
-    This fixture creates a reusable generator object, avoiding repetitive
-    setup in each test function.
+    This fixture instantiates an AnswerGenerator and replaces its internal
+    LLM client with an AsyncMock to simulate API calls without actual network
+    requests. It also ensures the client's lifecycle is managed correctly
+    for testing purposes.
 
-    Returns:
-        A configured instance of AnswerGenerator.
+    Args:
+        config: The search configuration fixture.
+
+    Yields:
+        An AnswerGenerator instance ready for testing.
     """
-    return AnswerGenerator(config)
+    gen = AnswerGenerator(config)
+    mock_client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=AsyncMock())),
+        close=AsyncMock(),
+    )
+    # Patch the instance to inject a mock client and control ownership,
+    # ensuring test isolation and predictable behavior.
+    with patch.object(gen, "_llm_client", mock_client), patch.object(
+        gen, "_owns_llm", True
+    ):
+        yield gen
 
 
 def test_generator_init_and_prompt(generator: AnswerGenerator) -> None:
-    """Tests the AnswerGenerator's initialization and default prompt.
+    """Tests that the generator initializes with the default prompt.
 
-    This ensures the generator is created with the correct default RAG prompt
-    template and that the internal LLM client is properly initialized.
+    This ensures that the component is configured with the correct RAG
+    prompt template out-of-the-box and that the internal client attribute
+    is present.
     """
     assert generator.rag_prompt_template == DEFAULT_RAG_PROMPT
     assert hasattr(generator, "_llm_client")
 
 
 def test_format_context(generator: AnswerGenerator, config: SearchConfig) -> None:
-    """Tests the formatting of search result chunks into a context string.
+    """Tests that context formatting enumerates and separates sources correctly.
 
-    This verifies that context documents are correctly numbered, sourced,
-    and concatenated into a single string suitable for an LLM prompt.
+    The LLM requires context to be clearly delineated. This test verifies
+    that source documents are formatted with unique identifiers and separators
+    to aid the model in citation and comprehension.
     """
-    chunks: list[dict[str, str]] = [
+    chunks: list[dict[str, Any]] = [
         {"id": "1", config.content_field: "A."},
         {"id": "2", config.content_field: "B."},
     ]
@@ -66,10 +88,11 @@ def test_format_context(generator: AnswerGenerator, config: SearchConfig) -> Non
 
 
 def test_format_context_missing_content(generator: AnswerGenerator) -> None:
-    """Tests context formatting when a chunk is missing the content field.
+    """Tests that missing content fields are handled gracefully.
 
-    This ensures the system handles malformed or incomplete search results
-    gracefully by inserting a placeholder ('N/A') for the missing content.
+    If a source document is missing the expected content field, the formatting
+    logic should substitute a placeholder ('N/A') instead of raising an error,
+    ensuring robustness.
     """
     out: str = generator._format_context([{"id": "1"}])
     assert "N/A" in out
@@ -81,65 +104,65 @@ async def test_generate_success(
 ) -> None:
     """Tests the successful answer generation path.
 
-    This verifies that given a question and context, the generator formats a
-    prompt, calls the LLM client, and returns the expected generated answer.
+    This test ensures that when provided with a query and context, the generator
+    correctly calls the underlying LLM client and returns the content of the
+    model's response.
     """
     client: Any = generator._llm_client
-    monkeypatch.setattr(
-        client.chat.completions,
-        "create",
-        AsyncMock(
-            return_value=SimpleNamespace(
-                choices=[
-                    SimpleNamespace(
-                        message=SimpleNamespace(content="Answer [Source 1]")
-                    )
-                ]
-            )
-        ),
+    # Define a realistic, nested mock response from the LLM.
+    mock_create_method = AsyncMock(
+        return_value=SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="Answer [Source 1]"))]
+        )
     )
+    monkeypatch.setattr(client.chat.completions, "create", mock_create_method)
+
     ans: str = await generator.generate("Q", [{"id": "1", config.content_field: "C"}])
+
     assert ans.startswith("Answer")
-    client.chat.completions.create.assert_awaited()
+    mock_create_method.assert_awaited()
 
 
 @pytest.mark.asyncio
 async def test_generate_empty_short_circuit(generator: AnswerGenerator) -> None:
-    """Tests the short-circuit behavior when no context is provided.
+    """Tests that generation is short-circuited if context is empty.
 
-    This ensures the generator immediately returns a fallback message without
-    making an unnecessary LLM call if no relevant information is found.
+    To save costs and avoid nonsensical LLM calls, the generator should not
+    contact the model if there are no context documents. It should instead
+    return a graceful, predefined message.
     """
     ans: str = await generator.generate("Q", [])
     assert "could not find any relevant information" in ans.lower()
-    generator._llm_client.chat.completions.create.assert_not_called()
+
+    # The mock LLM client is created in the `generator` fixture.
+    # We must verify it was NOT called.
+    llm_mock: Any = generator._llm_client
+    llm_mock.chat.completions.create.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_generate_exception(
-    generator: AnswerGenerator, config: SearchConfig, monkeypatch: MonkeyPatch
-) -> None:
-    """Tests the error handling during answer generation.
+async def test_generate_exception(generator: AnswerGenerator, config: SearchConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Raise on LLM error instead of returning a fallback string."""
+    async def boom(*_a: Any, **_k: Any) -> Any:
+        raise RuntimeError("oops")
 
-    This verifies that if the LLM client raises an exception, the generator
-    catches it and returns a user-friendly error message instead of crashing.
-    """
-    client: Any = generator._llm_client
-    monkeypatch.setattr(
-        client.chat.completions,
-        "create",
-        AsyncMock(side_effect=RuntimeError("oops")),
-    )
-    ans: str = await generator.generate("Q", [{"id": "1", config.content_field: "C"}])
-    assert "error occurred" in ans.lower()
+    # Ensure awaited call is awaitable
+    monkeypatch.setattr(generator._llm_client.chat.completions, "create", boom, raising=True)  # type: ignore[attr-defined]
+
+    with pytest.raises(RuntimeError):
+        await generator.generate("q", [{config.content_field: "x"}])
 
 
 @pytest.mark.asyncio
 async def test_generator_close(generator: AnswerGenerator) -> None:
-    """Tests that the generator's close method works correctly.
+    """Tests that the generator properly closes its underlying client.
 
-    This ensures that the generator properly delegates the close operation to
-    its underlying LLM client, allowing for graceful resource cleanup.
+    To ensure proper resource management, the generator's close method must
+    propagate the call to its internal, owned LLM client. This test verifies
+    that the client's `close` method is awaited.
     """
     await generator.close()
-    generator._llm_client.close.assert_awaited()
+
+    # The mock LLM client is created in the `generator` fixture.
+    llm_mock: Any = generator._llm_client
+    llm_mock.close.assert_awaited()

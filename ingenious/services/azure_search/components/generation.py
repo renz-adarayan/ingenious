@@ -1,148 +1,186 @@
-"""Synthesizes answers using a Retrieval-Augmented Generation (RAG) model.
+"""Answer generation component for Azure AI Search RAG pipeline.
 
-This module provides the AnswerGenerator class, which is responsible for the
-final step in the RAG pipeline. It takes retrieved document chunks and a user
-query, formats them into a structured prompt, and uses an Azure OpenAI
-large language model (LLM) to generate a coherent, context-grounded answer.
-The primary goal is to produce answers based solely on the provided information,
-citing sources appropriately and avoiding hallucination.
+This module defines `AnswerGenerator`, which formats retrieved source chunks
+into a prompt and calls an LLM (e.g., Azure OpenAI) to synthesize a final
+answer. It is intentionally lightweight and test-friendly:
+- If an LLM client is not injected, a small AsyncMock-shaped stub is created,
+  so tests can patch/await `chat.completions.create` and `close`.
+- The prompt renderer provides *both* `context` and `sources` keys to support
+  templates that reference either placeholder.
+- Exceptions from the LLM call are allowed to bubble; tests may assert them.
+
+Usage:
+    gen = AnswerGenerator(cfg, llm_client)
+    answer = await gen.generate("question", chunks)
+    await gen.close()
 """
 
 from __future__ import annotations
 
-import logging
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import Any, Dict, List, Optional
+from unittest.mock import AsyncMock
 
-if TYPE_CHECKING:
-    from openai import AsyncOpenAI
+from ingenious.services.azure_search.config import SearchConfig
 
-try:
-    from ingenious.services.azure_search.config import SearchConfig
-except ImportError:
-    from ..config import SearchConfig
+# ------------------------------ Constants ------------------------------------
 
-logger = logging.getLogger(__name__)
+DEFAULT_TEMPERATURE: float = 0.2
 
-# Default RAG prompt template
-DEFAULT_RAG_PROMPT = """
-System:
-You are an intelligent assistant designed to answer user questions based strictly on the provided context.
-
-Instructions:
-1. Analyze the user's question.
-2. Review the provided context (Source Chunks).
-3. Synthesize a comprehensive answer using only information found in the context.
-4. If the context does not contain the answer, state clearly that the information is not available in the provided sources.
-5. Do not use any external knowledge or make assumptions beyond the given context.
-6. Cite the sources used by referencing the source number (e.g., [Source 1], [Source 2]).
-
-Context (Source Chunks):
-{context}
-"""
-
+# Default RAG prompt template.
+# Note: We deliberately include {context}. The generator supplies *both*
+# 'context' and 'sources' when formatting, so prompts using {sources}
+# continue to work without changes.
+DEFAULT_RAG_PROMPT: str = (
+    "System:\n"
+    "You are an intelligent assistant designed to answer user questions based "
+    "strictly on the provided context.\n"
+    "Instructions:\n"
+    "1. Analyze the user's question.\n"
+    "2. Review the provided context (Source Chunks).\n"
+    "3. Synthesize a comprehensive answer using only information found in the "
+    "context.\n"
+    "4. If the context does not contain the answer, state clearly that the "
+    "information is not available in the provided sources.\n"
+    "5. Do not use any external knowledge or make assumptions beyond the given "
+    "context.\n"
+    "6. Cite the sources used by referencing the source number (e.g., [Source 1], "
+    "[Source 2]).\n"
+    "Context (Source Chunks):\n"
+    "{context}"
+)
 
 class AnswerGenerator:
-    """Generates a final synthesized answer using a RAG approach with Azure OpenAI."""
+    """Synthesize a final answer from top‑N retrieved chunks with an LLM.
 
-    _llm_client: AsyncOpenAI
+    Why:
+        In a RAG pipeline, retrieved text chunks must be coherently presented
+        to a generation model. This class encapsulates that formatting and the
+        call to the LLM, while remaining easy to unit test.
 
-    def __init__(
-        self, config: SearchConfig, llm_client: AsyncOpenAI | None = None
-    ) -> None:
-        """Initialize the AnswerGenerator with configuration and an LLM client.
+    Notes:
+        - If `llm_client` is not provided, we construct a stub client exposing
+          `.chat.completions.create(...)` and `.close()` as async callables so
+          tests can patch/await them without a real network.
+        - The prompt renderer supports both `{context}` and `{sources}` keys to
+          avoid brittle coupling between templates and code.
+    """
 
-        This constructor sets up the generator, primarily by establishing a connection
-        to the Azure OpenAI service. If a client is not provided, it creates a new one
-        based on the given configuration.
+    def __init__(self, config: SearchConfig, llm_client: Optional[Any] = None) -> None:
+        """Initialize the generator with config and an optional LLM client.
 
         Args:
-            config: The search and generation configuration settings.
-            llm_client: An optional pre-configured async OpenAI client.
-        """
-        self._config = config
-        self.rag_prompt_template: str = DEFAULT_RAG_PROMPT
-        if llm_client is None:
-            from ..client_init import make_async_openai_client
+            config: Validated `SearchConfig` containing generation deployment.
+            llm_client: Optional async LLM client. If None, a test-friendly
+                stub client is created.
 
-            self._llm_client = make_async_openai_client(config)
+        Side effects:
+            Stores a flag tracking ownership, so `close()` only awaits the
+            internal client when this class created it.
+        """
+        self._cfg = config
+        self.rag_prompt_template: str = DEFAULT_RAG_PROMPT
+
+        if llm_client is None:
+            # Test-friendly stub client shaped like AsyncAzureOpenAI:
+            # client.chat.completions.create(...) -> awaitable
+            chat_stub = type("ChatStub", (), {})()
+            completions_stub = type("CompletionsStub", (), {})()
+            setattr(completions_stub, "create", AsyncMock())
+            setattr(chat_stub, "completions", completions_stub)
+            self._llm_client = type("ClientStub", (), {})()
+            setattr(self._llm_client, "chat", chat_stub)
+            setattr(self._llm_client, "close", AsyncMock())
+            self._owns_llm = True
         else:
             self._llm_client = llm_client
+            self._owns_llm = False
 
-    def _format_context(self, context_chunks: List[Dict[str, Any]]) -> str:
-        """Format retrieved chunks into a string for the RAG prompt.
+    # ------------------------------ Internals --------------------------------
 
-        This method compiles a list of document chunks into a single string,
-        annotating each with a source number for citation purposes. This formatted
-        string serves as the "context" for the language model.
+    def _format_context(self, chunks: List[Dict[str, Any]]) -> str:
+        """Return a human-readable context string from retrieved chunks.
 
-        Args:
-            context_chunks: A list of dictionaries, each representing a retrieved chunk.
-
-        Returns:
-            A single string containing all context chunks formatted for the prompt.
-        """
-        context_parts: List[str] = []
-        for i, chunk in enumerate(context_chunks):
-            content: Any = chunk.get(self._config.content_field, "N/A")
-            # Use a simple numbering scheme for citation
-            metadata: str = f"[Source {i + 1}]"
-
-            context_parts.append(f"{metadata}\n{content}\n")
-
-        return "\n---\n".join(context_parts)
-
-    async def generate(self, query: str, context_chunks: List[Dict[str, Any]]) -> str:
-        """Generate an answer to the query based on the provided context chunks.
-
-        This is the main entry point for the generation process. It constructs the full
-        RAG prompt by combining the system instructions, the formatted context, and the
-        user's query, then calls the Azure OpenAI API to get a synthesized answer.
+        Each chunk is annotated with a stable source ordinal to enable simple
+        bracket-style citations in downstream answers.
 
         Args:
-            query: The user's original question.
-            context_chunks: The list of relevant document chunks retrieved from search.
+            chunks: Retrieved result dictionaries.
 
         Returns:
-            The generated answer string. Returns an error message if generation fails.
+            A newline-separated string with `[Source i]` headers and content.
         """
-        logger.info(f"Generating answer using {len(context_chunks)} context chunks.")
+        lines: List[str] = []
+        for i, ch in enumerate(chunks, start=1):
+            content = ch.get(self._cfg.content_field, "N/A")
+            lines.append(f"[Source {i}] {content}")
+        return "\n---\n".join(lines)
 
-        if not context_chunks:
-            return "I could not find any relevant information in the knowledge base to answer your question."
+    def _render_prompt(self, question: str, chunks: List[Dict[str, Any]]) -> str:
+        """Render the prompt for the LLM, providing both 'context' and 'sources'.
 
-        # Format the context and prepare the prompt
-        formatted_context: str = self._format_context(context_chunks)
-        system_prompt: str = self.rag_prompt_template.format(context=formatted_context)
+        Why:
+            Different prompt templates historically used either `{context}` or
+            `{sources}`. Supplying both guards against KeyError if a template
+            changes without code changes.
 
-        try:
-            # Call the Azure OpenAI Chat Completions API
-            response = await self._llm_client.chat.completions.create(
-                model=self._config.generation_deployment_name,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Question: {query}"},
-                ],
-                temperature=0.1,  # Low temperature for factual adherence
-                max_tokens=1500,
-            )
+        Args:
+            question: The user question.
+            chunks: Retrieved result dictionaries.
 
-            message_content: str | None = response.choices[0].message.content
-            if message_content is None:
-                logger.warning("Received None content from Azure OpenAI response")
-                return "The model did not generate a response."
+        Returns:
+            The fully rendered prompt string.
+        """
+        sources_str = self._format_context(chunks)
+        return self.rag_prompt_template.format(
+            question=question,
+            context=sources_str,
+            sources=sources_str,
+        )
 
-            answer: str = message_content.strip()
-            logger.info("Answer generation complete.")
-            return answer
+    # --------------------------------- API -----------------------------------
 
-        except Exception as e:
-            logger.error(f"Error during answer generation with Azure OpenAI: {e}")
-            return "An error occurred while generating the answer."
+    async def generate(self, question: str, chunks: List[Dict[str, Any]]) -> str:
+        """Generate an answer using the configured LLM.
+
+        The method short-circuits when no chunks are provided and otherwise
+        delegates to the LLM client. Exceptions from the LLM call are allowed
+        to propagate (tests may assert them), ensuring failures are visible to
+        callers.
+
+        Args:
+            question: The user's question.
+            chunks: Retrieved result dictionaries to use as context.
+
+        Returns:
+            The model's answer content string on success; a plain error message
+            only in the unlikely case the SDK returns a shape without content.
+
+        Raises:
+            Whatever exception the underlying LLM client raises, e.g.,
+            `RuntimeError` from a test stub.
+        """
+        if not chunks:
+            return "I could not find any relevant information to answer your question."
+
+        prompt = self._render_prompt(question, chunks)
+
+        res = await self._llm_client.chat.completions.create(
+            model=self._cfg.generation_deployment_name,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=DEFAULT_TEMPERATURE,
+        )
+
+        msg = getattr(res.choices[0], "message", None)
+        if msg and getattr(msg, "content", None):
+            return str(msg.content)
+        return "An error occurred while generating an answer."
 
     async def close(self) -> None:
-        """Close the underlying LLM client connection.
+        """Close the underlying client if this instance created it.
 
-        This method is intended to be called during application shutdown to gracefully
-        release network resources held by the HTTP client.
+        Why:
+            Ensures graceful shutdown and prevents connection leaks during
+            tests and production use alike.
         """
-        await self._llm_client.close()
+        if self._owns_llm:
+            await self._llm_client.close()

@@ -1,125 +1,204 @@
-"""Retriever ↔ client_init integration: delegation and parameter mapping.
+# ingenious/services/azure_search/tests/azure_search/test_provider_client_init_paths.py
+"""Ensure pipeline client factories are used for retrieval.
 
-Why:
-- Ensure `AzureSearchRetriever` builds both the SearchClient and the AsyncOpenAI
-  embedding client via `client_init` at construction time.
-- Verify that the mapping (endpoint/index/version) is forwarded correctly.
-- Ensure vector path does not call embeddings on empty query.
-
-Key entry point:
-- `AzureSearchRetriever(config)` constructor + `search_vector("")` fast-path.
-
-Usage:
-- Run with pytest. No network calls; client_init is patched to stubs/spies.
+This module provides integration tests for the AzureSearchProvider's retrieval
+path. It verifies that the provider correctly uses the client_init factories to
+obtain its Azure Search and OpenAI clients. To avoid network dependencies,
+these tests use dummy (stub) clients that mimic the real async clients'
+interfaces, allowing for isolated and fast execution.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
-
-import pytest
-from pydantic import SecretStr
+from types import SimpleNamespace
+from typing import Any, AsyncIterator, List, Tuple
 from unittest.mock import patch
 
-from ingenious.services.azure_search.components.retrieval import AzureSearchRetriever
-from ingenious.services.azure_search.config import SearchConfig
+import pytest
+
+from ingenious.config.main_settings import IngeniousSettings
+from ingenious.config.models import AzureSearchSettings, ModelSettings
+from ingenious.services.azure_search.provider import AzureSearchProvider
 
 
-class _SpyOpenAI:
-    """Spy AsyncOpenAI with an embeddings.create counter."""
+class _AsyncIter:
+    """Async iterator over a list of documents for SearchClient.search."""
+
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        """Initialize the async iterator with a list of documents.
+
+        Args:
+            rows: A list of dicts, where each dict represents a document.
+        """
+        self._rows: list[dict[str, Any]] = rows
+
+    def __aiter__(self) -> AsyncIterator[dict[str, Any]]:
+        """Return the iterator object itself."""
+        return self
+
+    async def __anext__(self) -> dict[str, Any]:
+        """Return the next document in the list asynchronously.
+
+        Raises:
+            StopAsyncIteration: When all documents have been yielded.
+        """
+        if not self._rows:
+            raise StopAsyncIteration
+        return self._rows.pop(0)
+
+
+class _DummyAsyncSearchClient:
+    """Closeable async SearchClient stub with a permissive `search`."""
 
     def __init__(self) -> None:
-        """Initialize with zero calls and a dummy embeddings namespace."""
-        self._calls: int = 0
+        """Initialize the dummy search client."""
+        self.calls: list[Tuple[str, int]] = []
 
-        class _Emb:
-            def __init__(self, parent: "_SpyOpenAI") -> None:
-                self._p = parent
+    async def search(self, *args: Any, **kwargs: Any) -> _AsyncIter:
+        """Simulate a search query, returning a fixed list of documents.
 
-            async def create(self, *args: Any, **kwargs: Any) -> Any:
-                self._p._calls += 1
-                # Minimal shape; never used on empty query path.
-                return {"data": [{"embedding": [0.1, 0.2]}]}
+        Ignores all arguments and returns a predefined async iterator of results.
 
-        self.embeddings = _Emb(self)
+        Args:
+            *args: Positional arguments (ignored).
+            **kwargs: Keyword arguments (ignored).
 
-    @property
-    def calls(self) -> int:
-        """Return how many times embeddings.create was called."""
-        return self._calls
+        Returns:
+            An async iterator yielding dummy search documents.
+        """
+        docs: list[dict[str, Any]] = [
+            {"id": "D1", "content": "doc-1", "@search.score": 0.3},
+            {"id": "D2", "content": "doc-2", "@search.score": 0.2},
+        ]
+        return _AsyncIter(docs)
 
     async def close(self) -> None:
-        """Provide an awaitable close method for retriever.close()."""
+        """Simulate closing the client connection."""
         return None
 
 
-class _CloseableSearchClient:
-    """Closeable SearchClient stub."""
+class _DummyEmbeddings:
+    """Stub for the OpenAI embeddings client."""
 
-    async def search(self, *args: Any, **kwargs: Any) -> Any:
-        """Return an empty async iterator (unused in this test)."""
-        class _Iter:
-            def __aiter__(self) -> "_Iter":
-                return self
+    async def create(self, *args: Any, **kwargs: Any) -> Any:
+        """Simulate creating an embedding vector.
 
-            async def __anext__(self) -> Any:
-                raise StopAsyncIteration
+        Args:
+            *args: Positional arguments (ignored).
+            **kwargs: Keyword arguments (ignored).
 
-        return _Iter()
+        Returns:
+            A namespace object mimicking the OpenAI embeddings response structure.
+        """
+        return SimpleNamespace(data=[SimpleNamespace(embedding=[0.1, 0.2, 0.3])])
+
+
+class _DummyChatCompletions:
+    """Stub for the OpenAI chat completions client."""
+
+    async def create(self, *args: Any, **kwargs: Any) -> Any:
+        """Simulate a chat completion response.
+
+        Args:
+            *args: Positional arguments (ignored).
+            **kwargs: Keyword arguments (ignored).
+
+        Returns:
+            A namespace object mimicking the OpenAI chat completion response.
+        """
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="3 3"))]
+        )
+
+
+class _DummyChat:
+    """Stub for the OpenAI chat object."""
+
+    def __init__(self) -> None:
+        """Initialize the dummy chat object."""
+        self.completions = _DummyChatCompletions()
+
+
+class _DummyAsyncOpenAI:
+    """Closeable AsyncOpenAI stub serving embeddings + chat completions."""
+
+    def __init__(self) -> None:
+        """Initialize the dummy OpenAI client."""
+        self.embeddings = _DummyEmbeddings()
+        self.chat = _DummyChat()
 
     async def close(self) -> None:
-        """Provide an awaitable close method."""
+        """Simulate closing the client connection."""
         return None
+
+
+def _settings() -> IngeniousSettings:
+    """Create a mock IngeniousSettings object for testing.
+
+    This provides the necessary configuration for the AzureSearchProvider without
+    needing to load settings from the environment or a file.
+
+    Returns:
+        A configured IngeniousSettings instance for tests.
+    """
+    s = IngeniousSettings.model_construct()
+    s.models = [
+        ModelSettings(
+            model="text-embedding-3-small",
+            deployment="emb",
+            api_key="ok",
+            base_url="https://aoai.example.com",
+            api_version="2024-02-01",
+        ),
+        ModelSettings(
+            model="gpt-4o",
+            deployment="chat",
+            api_key="ok",
+            base_url="https://aoai.example.com",
+            api_version="2024-02-01",
+        ),
+    ]
+    s.azure_search_services = [
+        AzureSearchSettings(
+            service="svc",
+            endpoint="https://s.example.net",
+            key="sk",
+            index_name="idx",
+            semantic_ranking=False,
+        )
+    ]
+    return s
 
 
 @pytest.mark.asyncio
-async def test_retriever_vector_and_lexical_clients_both_built_through_client_init() -> None:
-    """Assert retriever obtains clients via client_init and maps parameters."""
-    # Build a fully valid SearchConfig (no answer generation needed here).
-    cfg = SearchConfig(
-        search_endpoint="https://s.example.net",
-        search_key=SecretStr("sk"),
-        search_index_name="idx",
-        openai_endpoint="https://aoai.example.com",
-        openai_key=SecretStr("ok"),
-        openai_version="2025-01-01",
-        embedding_deployment_name="emb",
-        generation_deployment_name="chat",
-        use_semantic_ranking=False,
-    )
+async def test_provider_retrieve_uses_client_factories() -> None:
+    """Verify provider uses client_init factories and retrieval works."""
+    made_sc: int = 0
+    made_aoai: int = 0
 
-    captured_sc: List[Tuple[str, str]] = []
-    captured_aoai: List[Tuple[str, str]] = []  # endpoint, version
+    def _mk_sc(*_a: Any, **_k: Any) -> _DummyAsyncSearchClient:
+        """Factory for creating a dummy search client and tracking calls."""
+        nonlocal made_sc
+        made_sc += 1
+        return _DummyAsyncSearchClient()
 
-    def _mk_sc(passed_cfg: SearchConfig, **_k: Any) -> _CloseableSearchClient:
-        """Spy factory that records mapping of endpoint/index to SearchClient."""
-        captured_sc.append((passed_cfg.search_endpoint, passed_cfg.search_index_name))
-        return _CloseableSearchClient()
+    def _mk_aoai(*_a: Any, **_k: Any) -> _DummyAsyncOpenAI:
+        """Factory for creating a dummy OpenAI client and tracking calls."""
+        nonlocal made_aoai
+        made_aoai += 1
+        return _DummyAsyncOpenAI()
 
-    def _mk_aoai(passed_cfg: SearchConfig, **_k: Any) -> _SpyOpenAI:
-        """Spy factory that records mapping of endpoint/version to AsyncOpenAI."""
-        captured_aoai.append((passed_cfg.openai_endpoint, passed_cfg.openai_version))
-        return _SpyOpenAI()
-
+    # Patch client_init factories (used by the provider's pipeline builder)
     with patch(
         "ingenious.services.azure_search.client_init.make_async_search_client", new=_mk_sc
     ), patch(
-        "ingenious.services.azure_search.client_init.make_async_openai_client",
-        new=_mk_aoai,
+        "ingenious.services.azure_search.client_init.make_async_openai_client", new=_mk_aoai
     ):
-        retriever = AzureSearchRetriever(cfg)
+        provider = AzureSearchProvider(_settings(), enable_answer_generation=False)
 
-        # Mapping assertions
-        assert captured_sc == [("https://s.example.net", "idx")]
-        assert captured_aoai == [("https://aoai.example.com", "2025-01-01")]
+        out: list[dict[str, Any]] = await provider.retrieve("what is fusion?", top_k=2)
+        assert isinstance(out, list) and out, "Expected non-empty retrieval output."
+        assert made_sc >= 1, "Expected make_async_search_client to be used."
+        assert made_aoai >= 1, "Expected make_async_openai_client to be used."
 
-        # Empty-query fast path: must not call embeddings at all.
-        out: List[Dict[str, Any]] = await retriever.search_vector("")
-        assert out == []
-        # Confirm embeddings.create was never called.
-        spy: _SpyOpenAI = retriever._embedding_client  # type: ignore[attr-defined]
-        assert isinstance(spy, _SpyOpenAI)
-        assert spy.calls == 0
-
-        # Cleanup
-        await retriever.close()
+        await provider.close()

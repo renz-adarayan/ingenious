@@ -385,9 +385,9 @@ def _extract_search_config(svc: AzureSearchService) -> dict[str, Any]:
 
     # Validate that top_k and top_n are positive
     if top_k_retrieval <= 0:
-        raise ValueError(f"top_k_retrieval must be positive, got {top_k_retrieval}")
+        raise ConfigError(f"top_k_retrieval must be positive, got {top_k_retrieval}")
     if top_n_final <= 0:
-        raise ValueError(f"top_n_final must be positive, got {top_n_final}")
+        raise ConfigError(f"top_n_final must be positive, got {top_n_final}")
 
     return {
         "search_endpoint": search_endpoint,
