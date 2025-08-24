@@ -29,6 +29,15 @@ from pydantic import SecretStr
 # Public model under test
 from ingenious.services.azure_search.config import DEFAULT_DAT_PROMPT, SearchConfig
 
+@pytest.fixture(autouse=True)
+def _conditionally_clear_semantic_env(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Clear AZURE_SEARCH_SEMANTIC_CONFIG only for the 'missing semantic' test."""
+    name = request.node.name.lower()
+    if "test_cli_missing_semantic_name_exits_1" in name or "missing_semantic" in name:
+        monkeypatch.delenv("AZURE_SEARCH_SEMANTIC_CONFIG", raising=False)
+
 # ----- Lightweight stubs to satisfy imports (no real Azure/OpenAI needed) -----
 
 @pytest.fixture(autouse=True)
