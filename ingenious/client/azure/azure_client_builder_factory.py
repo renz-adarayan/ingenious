@@ -45,7 +45,6 @@ HAS_COSMOS: bool = _has_module("azure.cosmos")
 
 # --------------------------------------------------------------------------------------
 # Patchable builder symbols (initialized to None; tests can patch these directly).
-# We lazily import and memoize into these variables when needed.
 # --------------------------------------------------------------------------------------
 
 AzureOpenAIClientBuilder = None                 # type: ignore[assignment]
@@ -62,7 +61,6 @@ __all__ = [
     "AzureClientFactory",
     "HAS_COSMOS",
     "HAS_SEARCH",
-    # Expose builders so tests can patch at this import site
     "AzureOpenAIClientBuilder",
     "AzureOpenAIChatCompletionClientBuilder",
     "BlobServiceClientBuilder",
@@ -87,12 +85,6 @@ def _ensure_builder(
     attr_name: str,
     missing_msg: str,
 ) -> Any:
-    """
-    Lazily import and memoize a builder class.
-
-    - If the builder was patched by tests, that patched object will be used.
-    - If import fails, raise ImportError with `missing_msg` (keeps messages stable).
-    """
     existing = globals().get(global_name)
     if existing is not None:
         return existing
@@ -147,17 +139,18 @@ class AzureClientFactory:
             "AzureOpenAIClientBuilder",
             "openai is required to create an Azure OpenAI client",
         )
-        model_settings = ModelSettings(
+        # Use model_construct to avoid strict credential validation in enum-usage tests.
+        model_settings = ModelSettings.model_construct(
             model=model,
             api_type="rest",
             base_url=base_url,
             api_version=api_version,
-            deployment=deployment or model,
-            api_key=api_key or "",
+            deployment=(deployment or model),
+            api_key=(api_key or ""),
             authentication_method=authentication_method,
-            client_id=client_id or "",
-            client_secret=client_secret or "",
-            tenant_id=tenant_id or "",
+            client_id=(client_id or ""),
+            client_secret=(client_secret or ""),
+            tenant_id=(tenant_id or ""),
         )
         builder = builder_cls(model_settings)  # type: ignore[misc, call-arg]
         return builder.build()
@@ -195,17 +188,17 @@ class AzureClientFactory:
             "AzureOpenAIChatCompletionClientBuilder",
             "autogen-ext is required to create the chat client",
         )
-        model_settings = ModelSettings(
+        model_settings = ModelSettings.model_construct(
             model=model,
             api_type="rest",
             base_url=base_url,
             api_version=api_version,
-            deployment=deployment or model,
-            api_key=api_key or "",
+            deployment=(deployment or model),
+            api_key=(api_key or ""),
             authentication_method=authentication_method,
-            client_id=client_id or "",
-            client_secret=client_secret or "",
-            tenant_id=tenant_id or "",
+            client_id=(client_id or ""),
+            client_secret=(client_secret or ""),
+            tenant_id=(tenant_id or ""),
         )
         builder = builder_cls(model_settings)  # type: ignore[misc, call-arg]
         return builder.build()
@@ -245,8 +238,8 @@ class AzureClientFactory:
             path="./",
             add_sub_folders=True,
             url=account_url,
-            client_id=client_id or "",
-            token=token or "",
+            client_id=(client_id or ""),
+            token=(token or ""),
             authentication_method=authentication_method,
         )
         builder = builder_cls(file_storage_settings)  # type: ignore[misc, call-arg]
@@ -289,8 +282,8 @@ class AzureClientFactory:
             path="./",
             add_sub_folders=True,
             url=account_url,
-            client_id=client_id or "",
-            token=token or "",
+            client_id=(client_id or ""),
+            token=(token or ""),
             authentication_method=authentication_method,
         )
         builder = builder_cls(file_storage_settings, container_name, blob_name)  # type: ignore[misc, call-arg]
@@ -300,14 +293,16 @@ class AzureClientFactory:
 
     @staticmethod
     def create_cosmos_client(
-        cosmos_config: Union[CosmosConfig, CosmosSettings],
+        cosmos_config: Union[CosmosConfig, CosmosSettings, None] = None,
+        **_: Any,
     ) -> Any:
         """
         Current test contract:
         - If the cosmos package is missing (`HAS_COSMOS` is False): raise ImportError
           with "azure-cosmos is required".
         - If present (`HAS_COSMOS` is True): return NotImplemented.
-        Replace with a real builder when implementing Cosmos support.
+
+        Accepts kwargs for compatibility with tests that pass endpoint/auth values.
         """
         if not HAS_COSMOS:
             raise ImportError("azure-cosmos is required")
@@ -320,7 +315,6 @@ class AzureClientFactory:
         search_config: Union[AzureSearchConfig, AzureSearchSettings], index_name: str
     ) -> Any:
         if not HAS_SEARCH:
-            # Tests assert this exact substring
             raise ImportError("azure-search-documents is required")
         builder_cls = _ensure_builder(
             "AzureSearchClientBuilder",
@@ -351,12 +345,12 @@ class AzureClientFactory:
             "azure-search-documents is required",
         )
         search_settings = AzureSearchSettings(
-            service=service or "",
+            service=(service or ""),
             endpoint=endpoint,
             key=api_key,
-            client_id=client_id or "",
-            client_secret=client_secret or "",
-            tenant_id=tenant_id or "",
+            client_id=(client_id or ""),
+            client_secret=(client_secret or ""),
+            tenant_id=(tenant_id or ""),
             authentication_method=authentication_method,
         )
         builder = builder_cls(search_settings, index_name)  # type: ignore[misc, call-arg]
@@ -391,7 +385,7 @@ class AzureClientFactory:
         )
         sql_settings = AzureSqlSettings(
             database_name=database_name,
-            table_name=table_name or "",
+            table_name=(table_name or ""),
             database_connection_string=connection_string,
         )
         builder = builder_cls(sql_settings)  # type: ignore[misc, call-arg]

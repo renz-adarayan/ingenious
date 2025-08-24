@@ -5,6 +5,10 @@ This module tests external service integrations, including OpenAI service
 which uses Azure OpenAI client builder functions for authentication.
 """
 
+from __future__ import annotations
+
+from types import SimpleNamespace
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -17,6 +21,27 @@ from ingenious.errors.token_limit_exceeded_error import TokenLimitExceededError
 from ingenious.external_services.openai_service import OpenAIService
 
 
+# --------------------------- helpers ---------------------------
+
+def _make_client(
+    *, return_value: Any | None = None, side_effect: Exception | None = None
+) -> tuple[Any, Mock]:
+    """
+    Build a minimal client object matching the service's expectations:
+      client.chat.completions.create(...)
+    """
+    create = Mock()
+    if side_effect is not None:
+        create.side_effect = side_effect
+    else:
+        create.return_value = return_value
+
+    client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+    return client, create
+
+
 class TestOpenAIService:
     """Test cases for OpenAI service."""
 
@@ -27,12 +52,11 @@ class TestOpenAIService:
         api_version = "2023-03-15-preview"
         model = "gpt-4.1-nano"
 
+        mock_client = object()
         with patch(
-            "ingenious.external_services.openai_service.AzureOpenAI"
-        ) as mock_azure:
-            mock_client = Mock()
-            mock_azure.return_value = mock_client
-
+            "ingenious.external_services.openai_service.AzureClientFactory.create_openai_client_from_params",
+            return_value=mock_client,
+        ) as make_client:
             service = OpenAIService(
                 azure_endpoint,
                 api_key,
@@ -41,28 +65,35 @@ class TestOpenAIService:
                 authentication_method=AuthenticationMethod.TOKEN,
             )
 
-            assert service.client == mock_client
-            assert service.model == "gpt-4.1-nano"
-            mock_azure.assert_called_once_with(
-                azure_endpoint=azure_endpoint,
-                api_key=api_key,
-                api_version=api_version,
-                azure_deployment=model,
-            )
+            assert service.client is mock_client
+            assert service.model == model
+
+            # Assert call contract to the factory
+            make_client.assert_called_once()
+            kwargs = make_client.call_args.kwargs
+            assert kwargs["model"] == model
+            assert kwargs["base_url"] == azure_endpoint
+            assert kwargs["api_version"] == api_version
+            # deployment defaults to model when not provided
+            assert kwargs["deployment"] == model
+            assert kwargs["api_key"] == api_key
+            assert kwargs["authentication_method"] == AuthenticationMethod.TOKEN
+            assert kwargs["client_id"] is None
+            assert kwargs["client_secret"] is None
+            assert kwargs["tenant_id"] is None
 
     def test_init_with_openai_config(self):
-        """Test OpenAI service initialization - only Azure is supported."""
+        """Test OpenAI service initialization (factory path)."""
         azure_endpoint = "https://test.openai.azure.com/"
         api_key = "test_key"
         api_version = "2023-03-15-preview"
         model = "gpt-4.1-nano"
 
+        mock_client = object()
         with patch(
-            "ingenious.external_services.openai_service.AzureOpenAI"
-        ) as mock_azure:
-            mock_client = Mock()
-            mock_azure.return_value = mock_client
-
+            "ingenious.external_services.openai_service.AzureClientFactory.create_openai_client_from_params",
+            return_value=mock_client,
+        ) as make_client:
             service = OpenAIService(
                 azure_endpoint,
                 api_key,
@@ -70,25 +101,25 @@ class TestOpenAIService:
                 model,
                 authentication_method=AuthenticationMethod.TOKEN,
             )
-
-            assert service.client == mock_client
-            assert service.model == "gpt-4.1-nano"
+            assert service.client is mock_client
+            assert service.model == model
+            make_client.assert_called_once()
 
     def test_init_missing_config(self):
         """Test OpenAI service initialization with missing configuration."""
-        # Test with None parameters - should raise OpenAIError due to missing credentials
-        with pytest.raises(Exception):
-            OpenAIService(None, None, None, None)
+        # Make the factory raise so we don't rely on real packages
+        with patch(
+            "ingenious.external_services.openai_service.AzureClientFactory.create_openai_client_from_params",
+            side_effect=Exception("invalid configuration"),
+        ):
+            with pytest.raises(Exception, match="invalid configuration"):
+                OpenAIService(None, None, None, None)  # type: ignore[arg-type]
+
+    # ------------------- behavior / error tests (DI) -------------------
 
     @pytest.mark.asyncio
     async def test_generate_response_success_azure(self):
-        """Test successful response generation with Azure OpenAI."""
-        azure_endpoint = "https://test.openai.azure.com/"
-        api_key = "test_key"
-        api_version = "2023-03-15-preview"
-        model = "gpt-4.1-nano"
-
-        # Mock response
+        """Test successful response generation (DI client)."""
         mock_message = ChatCompletionMessage(role="assistant", content="Test response")
         mock_choice = Choice(index=0, message=mock_message, finish_reason="stop")
         mock_response = ChatCompletion(
@@ -100,30 +131,25 @@ class TestOpenAIService:
             usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
         )
 
-        with patch(
-            "ingenious.external_services.openai_service.AzureOpenAI"
-        ) as mock_azure:
-            mock_client = Mock()
-            mock_client.chat.completions.create.return_value = mock_response
-            mock_azure.return_value = mock_client
+        client, create = _make_client(return_value=mock_response)
+        service = OpenAIService(
+            "https://test.openai.azure.com/",
+            "k",
+            "2023-03-15-preview",
+            "gpt-4.1-nano",
+            client=client,
+        )
 
-            service = OpenAIService(azure_endpoint, api_key, api_version, model)
-            messages = [{"role": "user", "content": "Hello"}]
-
-            response = await service.generate_response(messages)
-
-            assert response.content == "Test response"
-            assert response.role == "assistant"
+        response = await service.generate_response(
+            messages=[{"role": "user", "content": "Hello"}]
+        )
+        assert response.content == "Test response"
+        assert response.role == "assistant"
+        create.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_generate_response_success_openai(self):
-        """Test successful response generation with Azure OpenAI."""
-        azure_endpoint = "https://test.openai.azure.com/"
-        api_key = "test_key"
-        api_version = "2023-03-15-preview"
-        model = "gpt-4.1-nano"
-
-        # Mock response
+        """Same as Azure path; DI client drives behavior."""
         mock_message = ChatCompletionMessage(role="assistant", content="Test response")
         mock_choice = Choice(index=0, message=mock_message, finish_reason="stop")
         mock_response = ChatCompletion(
@@ -135,118 +161,93 @@ class TestOpenAIService:
             usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
         )
 
-        with patch(
-            "ingenious.external_services.openai_service.AzureOpenAI"
-        ) as mock_azure:
-            mock_client = Mock()
-            mock_client.chat.completions.create.return_value = mock_response
-            mock_azure.return_value = mock_client
+        client, _ = _make_client(return_value=mock_response)
+        service = OpenAIService(
+            "https://test.openai.azure.com/",
+            "k",
+            "2023-03-15-preview",
+            "gpt-4.1-nano",
+            client=client,
+        )
 
-            service = OpenAIService(azure_endpoint, api_key, api_version, model)
-            messages = [{"role": "user", "content": "Hello"}]
-
-            response = await service.generate_response(messages)
-
-            assert response.content == "Test response"
-            assert response.role == "assistant"
+        response = await service.generate_response(
+            messages=[{"role": "user", "content": "Hello"}]
+        )
+        assert response.content == "Test response"
+        assert response.role == "assistant"
 
     @pytest.mark.asyncio
     async def test_generate_response_content_filter_error(self):
         """Test response generation with content filter error."""
-        azure_endpoint = "https://test.openai.azure.com/"
-        api_key = "test_key"
-        api_version = "2023-03-15-preview"
-        model = "gpt-4.1-nano"
+        from openai import BadRequestError
 
-        with patch(
-            "ingenious.external_services.openai_service.AzureOpenAI"
-        ) as mock_azure:
-            mock_client = Mock()
-            from openai import BadRequestError
+        token_body = {
+            "code": "content_filter",
+            "message": "Content was filtered due to policy violation",
+            "innererror": {"content_filter_result": {}},
+        }
+        err = BadRequestError("Content filter error", response=Mock(), body=token_body)
+        # set code for our handler
+        err.code = "content_filter"  # type: ignore[attr-defined]
 
-            mock_error = BadRequestError(
-                "Content filter error",
-                response=Mock(),
-                body={
-                    "code": "content_filter",
-                    "message": "Content was filtered due to policy violation",
-                    "innererror": {"content_filter_result": {}},
-                },
-            )
-            mock_error.code = "content_filter"
-            mock_client.chat.completions.create.side_effect = mock_error
-            mock_azure.return_value = mock_client
+        client, _ = _make_client(side_effect=err)
+        service = OpenAIService(
+            "https://test.openai.azure.com/",
+            "k",
+            "2023-03-15-preview",
+            "gpt-4.1-nano",
+            client=client,
+        )
 
-            service = OpenAIService(azure_endpoint, api_key, api_version, model)
-            messages = [{"role": "user", "content": "Inappropriate content"}]
-
-            with pytest.raises(ContentFilterError, match="Content was filtered"):
-                await service.generate_response(messages)
+        with pytest.raises(ContentFilterError, match="Content was filtered"):
+            await service.generate_response([{"role": "user", "content": "bad"}])
 
     @pytest.mark.asyncio
     async def test_generate_response_token_limit_error(self):
         """Test response generation with token limit exceeded error."""
-        azure_endpoint = "https://test.openai.azure.com/"
-        api_key = "test_key"
-        api_version = "2023-03-15-preview"
-        model = "gpt-4.1-nano"
+        from openai import BadRequestError
 
-        with patch(
-            "ingenious.external_services.openai_service.AzureOpenAI"
-        ) as mock_azure:
-            mock_client = Mock()
-            from openai import BadRequestError
+        msg = (
+            "This model's maximum context length is 4096 tokens, however you requested 5000 tokens "
+            "(4500 in your prompt; 500 for the completion). Please reduce your prompt; or completion length."
+        )
+        err = BadRequestError(msg, response=Mock(), body={"message": msg})
 
-            token_error_msg = "This model's maximum context length is 4096 tokens, however you requested 5000 tokens (4500 in your prompt; 500 for the completion). Please reduce your prompt; or completion length."
-            mock_error = BadRequestError(
-                token_error_msg, response=Mock(), body={"message": token_error_msg}
-            )
-            mock_client.chat.completions.create.side_effect = mock_error
-            mock_azure.return_value = mock_client
+        client, _ = _make_client(side_effect=err)
+        service = OpenAIService(
+            "https://test.openai.azure.com/",
+            "k",
+            "2023-03-15-preview",
+            "gpt-4.1-nano",
+            client=client,
+        )
 
-            service = OpenAIService(azure_endpoint, api_key, api_version, model)
-            messages = [{"role": "user", "content": "Very long message"}]
-
-            with pytest.raises(TokenLimitExceededError):
-                await service.generate_response(messages)
+        with pytest.raises(TokenLimitExceededError):
+            await service.generate_response([{"role": "user", "content": "long"}])
 
     @pytest.mark.asyncio
     async def test_generate_response_generic_error(self):
         """Test response generation with generic error."""
-        azure_endpoint = "https://test.openai.azure.com/"
-        api_key = "test_key"
-        api_version = "2023-03-15-preview"
-        model = "gpt-4.1-nano"
+        from openai import BadRequestError
 
-        with patch(
-            "ingenious.external_services.openai_service.AzureOpenAI"
-        ) as mock_azure:
-            mock_client = Mock()
-            from openai import BadRequestError
+        msg = "An unexpected error occurred"
+        err = BadRequestError(msg, response=Mock(), body={"message": msg})
 
-            mock_error = BadRequestError(
-                "An unexpected error occurred",
-                response=Mock(),
-                body={"message": "An unexpected error occurred"},
-            )
-            mock_client.chat.completions.create.side_effect = mock_error
-            mock_azure.return_value = mock_client
+        client, _ = _make_client(side_effect=err)
+        service = OpenAIService(
+            "https://test.openai.azure.com/",
+            "k",
+            "2023-03-15-preview",
+            "gpt-4.1-nano",
+            client=client,
+        )
 
-            service = OpenAIService(azure_endpoint, api_key, api_version, model)
-            messages = [{"role": "user", "content": "Hello"}]
-
-            with pytest.raises(Exception, match="An unexpected error occurred"):
-                await service.generate_response(messages)
+        with pytest.raises(Exception, match=msg):
+            await service.generate_response([{"role": "user", "content": "Hello"}])
 
     @pytest.mark.asyncio
     async def test_generate_response_with_tools(self):
         """Test response generation with tools."""
-        azure_endpoint = "https://test.openai.azure.com/"
-        api_key = "test_key"
-        api_version = "2023-03-15-preview"
-        model = "gpt-4.1-nano"
-
-        # Mock response
         mock_message = ChatCompletionMessage(role="assistant", content="Test response")
         mock_choice = Choice(index=0, message=mock_message, finish_reason="stop")
         mock_response = ChatCompletion(
@@ -258,31 +259,25 @@ class TestOpenAIService:
             usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
         )
 
-        with patch(
-            "ingenious.external_services.openai_service.AzureOpenAI"
-        ) as mock_azure:
-            mock_client = Mock()
-            mock_client.chat.completions.create.return_value = mock_response
-            mock_azure.return_value = mock_client
+        client, _ = _make_client(return_value=mock_response)
+        service = OpenAIService(
+            "https://test.openai.azure.com/",
+            "k",
+            "2023-03-15-preview",
+            "gpt-4.1-nano",
+            client=client,
+        )
 
-            service = OpenAIService(azure_endpoint, api_key, api_version, model)
-            messages = [{"role": "user", "content": "Hello"}]
-            tools = [{"type": "function", "function": {"name": "test_tool"}}]
+        messages = [{"role": "user", "content": "Hello"}]
+        tools = [{"type": "function", "function": {"name": "test_tool"}}]
 
-            response = await service.generate_response(messages, tools=tools)
-
-            assert response.content == "Test response"
-            assert response.role == "assistant"
+        response = await service.generate_response(messages, tools=tools)
+        assert response.content == "Test response"
+        assert response.role == "assistant"
 
     @pytest.mark.asyncio
     async def test_generate_response_empty_response(self):
-        """Test response generation with empty response."""
-        azure_endpoint = "https://test.openai.azure.com/"
-        api_key = "test_key"
-        api_version = "2023-03-15-preview"
-        model = "gpt-4.1-nano"
-
-        # Mock response with empty content
+        """Test response generation with empty assistant content."""
         mock_message = ChatCompletionMessage(role="assistant", content="")
         mock_choice = Choice(index=0, message=mock_message, finish_reason="stop")
         mock_response = ChatCompletion(
@@ -294,29 +289,23 @@ class TestOpenAIService:
             usage={"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10},
         )
 
-        with patch(
-            "ingenious.external_services.openai_service.AzureOpenAI"
-        ) as mock_azure:
-            mock_client = Mock()
-            mock_client.chat.completions.create.return_value = mock_response
-            mock_azure.return_value = mock_client
+        client, _ = _make_client(return_value=mock_response)
+        service = OpenAIService(
+            "https://test.openai.azure.com/",
+            "k",
+            "2023-03-15-preview",
+            "gpt-4.1-nano",
+            client=client,
+        )
 
-            service = OpenAIService(azure_endpoint, api_key, api_version, model)
-            messages = [{"role": "user", "content": "Hello"}]
-
-            response = await service.generate_response(messages)
-
-            assert response.content == ""
+        response = await service.generate_response(
+            messages=[{"role": "user", "content": "Hello"}]
+        )
+        assert response.content == ""
 
     @pytest.mark.asyncio
     async def test_generate_response_no_choices(self):
         """Test response generation with no choices in response."""
-        azure_endpoint = "https://test.openai.azure.com/"
-        api_key = "test_key"
-        api_version = "2023-03-15-preview"
-        model = "gpt-4.1-nano"
-
-        # Mock response with no choices
         mock_response = ChatCompletion(
             id="test_id",
             choices=[],
@@ -326,28 +315,22 @@ class TestOpenAIService:
             usage={"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10},
         )
 
-        with patch(
-            "ingenious.external_services.openai_service.AzureOpenAI"
-        ) as mock_azure:
-            mock_client = Mock()
-            mock_client.chat.completions.create.return_value = mock_response
-            mock_azure.return_value = mock_client
+        client, _ = _make_client(return_value=mock_response)
+        service = OpenAIService(
+            "https://test.openai.azure.com/",
+            "k",
+            "2023-03-15-preview",
+            "gpt-4.1-nano",
+            client=client,
+        )
 
-            service = OpenAIService(azure_endpoint, api_key, api_version, model)
-            messages = [{"role": "user", "content": "Hello"}]
-
-            with pytest.raises(IndexError):
-                await service.generate_response(messages)
+        # The service raises a clear RuntimeError for this condition
+        with pytest.raises(RuntimeError, match="missing 'choices'"):
+            await service.generate_response([{"role": "user", "content": "Hello"}])
 
     @pytest.mark.asyncio
     async def test_generate_response_json_mode(self):
         """Test response generation with JSON mode."""
-        azure_endpoint = "https://test.openai.azure.com/"
-        api_key = "test_key"
-        api_version = "2023-03-15-preview"
-        model = "gpt-4.1-nano"
-
-        # Mock response
         mock_message = ChatCompletionMessage(
             role="assistant", content='{"result": "success"}'
         )
@@ -361,30 +344,24 @@ class TestOpenAIService:
             usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
         )
 
-        with patch(
-            "ingenious.external_services.openai_service.AzureOpenAI"
-        ) as mock_azure:
-            mock_client = Mock()
-            mock_client.chat.completions.create.return_value = mock_response
-            mock_azure.return_value = mock_client
+        client, _ = _make_client(return_value=mock_response)
+        service = OpenAIService(
+            "https://test.openai.azure.com/",
+            "k",
+            "2023-03-15-preview",
+            "gpt-4.1-nano",
+            client=client,
+        )
 
-            service = OpenAIService(azure_endpoint, api_key, api_version, model)
-            messages = [{"role": "user", "content": "Return JSON"}]
-
-            response = await service.generate_response(messages, json_mode=True)
-
-            assert response.content == '{"result": "success"}'
-            assert response.role == "assistant"
+        response = await service.generate_response(
+            [{"role": "user", "content": "Return JSON"}], json_mode=True
+        )
+        assert response.content == '{"result": "success"}'
+        assert response.role == "assistant"
 
     @pytest.mark.asyncio
     async def test_generate_response_with_tool_choice(self):
-        """Test response generation with tool choice."""
-        azure_endpoint = "https://test.openai.azure.com/"
-        api_key = "test_key"
-        api_version = "2023-03-15-preview"
-        model = "gpt-4.1-nano"
-
-        # Mock response
+        """Test response generation with tool choice present."""
         mock_message = ChatCompletionMessage(
             role="assistant",
             content=None,
@@ -406,20 +383,20 @@ class TestOpenAIService:
             usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
         )
 
-        with patch(
-            "ingenious.external_services.openai_service.AzureOpenAI"
-        ) as mock_azure:
-            mock_client = Mock()
-            mock_client.chat.completions.create.return_value = mock_response
-            mock_azure.return_value = mock_client
+        client, _ = _make_client(return_value=mock_response)
+        service = OpenAIService(
+            "https://test.openai.azure.com/",
+            "k",
+            "2023-03-15-preview",
+            "gpt-4.1-nano",
+            client=client,
+        )
 
-            service = OpenAIService(azure_endpoint, api_key, api_version, model)
-            messages = [{"role": "user", "content": "Use the tool"}]
-            tools = [{"type": "function", "function": {"name": "test_tool"}}]
+        messages = [{"role": "user", "content": "Use the tool"}]
+        tools = [{"type": "function", "function": {"name": "test_tool"}}]
 
-            response = await service.generate_response(
-                messages, tools=tools, tool_choice="auto"
-            )
-
-            assert response.role == "assistant"
-            assert response.tool_calls is not None
+        response = await service.generate_response(
+            messages, tools=tools, tool_choice="auto"
+        )
+        assert response.role == "assistant"
+        assert response.tool_calls is not None

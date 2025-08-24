@@ -1,4 +1,3 @@
-# ingenious/config/auth_config.py
 from __future__ import annotations
 
 import asyncio
@@ -27,13 +26,13 @@ class AzureAuthConfig:
     """
     Centralized auth configuration for Azure client builders.
 
-    Fields:
+    Fields (logically):
       - authentication_method: AuthenticationMethod
-      - api_key: Optional[str] (TOKEN/API key)
-      - client_id, client_secret, tenant_id: Optional[str] (AAD/SPN or MSI client_id)
-      - endpoint: Optional[str] (used by some callers)
-      - openai_key / openai_endpoint aliases are recognized in from_config()
-      - search_key alias recognized in from_config()
+      - api_key: Optional[str]
+      - client_id, client_secret, tenant_id: Optional[str]
+      - endpoint: Optional[str]
+      - openai_key / openai_endpoint aliases
+      - api_version: Optional[str]
     """
 
     def __init__(
@@ -45,19 +44,21 @@ class AzureAuthConfig:
         tenant_id: Optional[str] = None,
         endpoint: Optional[str] = None,
     ) -> None:
-        self.authentication_method = authentication_method
-        self.api_key = api_key
-        self.client_id = client_id
-        self.client_secret = client_secret
-        self.tenant_id = tenant_id
-        self.endpoint = endpoint
+        # Use object.__setattr__ to avoid Pydantic attribute guards when this
+        # initializer is (intentionally) called with a Pydantic model instance.
+        object.__setattr__(self, "authentication_method", authentication_method)
+        object.__setattr__(self, "api_key", api_key)
+        object.__setattr__(self, "client_id", client_id)
+        object.__setattr__(self, "client_secret", client_secret)
+        object.__setattr__(self, "tenant_id", tenant_id)
+        object.__setattr__(self, "endpoint", endpoint)
 
-        # Optional AOAI specifics (may be read by consumers)
-        self.openai_key: Optional[str] = api_key if api_key else None
-        self.openai_endpoint: Optional[str] = endpoint if endpoint else None
+        # Optional AOAI specifics
+        object.__setattr__(self, "openai_key", api_key if api_key else None)
+        object.__setattr__(self, "openai_endpoint", endpoint if endpoint else None)
 
         # Optional API version if present in config
-        self.api_version: Optional[str] = None
+        object.__setattr__(self, "api_version", None)
 
     @classmethod
     def default_credential(cls) -> "AzureAuthConfig":
@@ -70,7 +71,7 @@ class AzureAuthConfig:
         if api_key is not None:
             api_key = str(api_key)
 
-        # Endpoint aliases (not required everywhere)
+        # Endpoint aliases
         endpoint = _get(config, "endpoint", "base_url", "url", "openai_endpoint")
 
         # AAD/SPN/MSI
@@ -89,7 +90,7 @@ class AzureAuthConfig:
         # Optional API version (useful for AOAI)
         api_version = _get(config, "openai_version", "api_version")
 
-        # Precedence: TokenCredential (AAD/MSI) > API key
+        # Precedence: SPN > MSI (with client_id) > API key > Default
         if client_id and client_secret and tenant_id:
             method = AuthenticationMethod.CLIENT_ID_AND_SECRET
         elif client_id and not client_secret and not tenant_id:
@@ -99,7 +100,7 @@ class AzureAuthConfig:
         else:
             method = AuthenticationMethod.DEFAULT_CREDENTIAL
 
-        # Respect explicit method only if it doesn't demote SPN
+        # Respect explicit method unless it would demote SPN
         if isinstance(explicit, AuthenticationMethod):
             if method != AuthenticationMethod.CLIENT_ID_AND_SECRET:
                 method = explicit
@@ -112,9 +113,10 @@ class AzureAuthConfig:
             tenant_id=tenant_id,
             endpoint=endpoint,
         )
-        inst.openai_key = api_key
-        inst.openai_endpoint = endpoint
-        inst.api_version = str(api_version) if api_version else None
+        # Set optional fields via object.__setattr__ to be safe on all instances
+        object.__setattr__(inst, "openai_key", api_key)
+        object.__setattr__(inst, "openai_endpoint", endpoint)
+        object.__setattr__(inst, "api_version", str(api_version) if api_version else None)
         return inst
 
     def validate_for_method(self) -> None:
@@ -138,12 +140,6 @@ class AzureAuthConfig:
         Return a **synchronous** callable that yields a bearer token string
         suitable for passing as `azure_ad_token_provider` to
         `openai.AsyncAzureOpenAI`. Returns None iff key-based auth should be used.
-
-        Strategy:
-          1) If explicit TOKEN w/ api_key → return None (we will use key auth).
-          2) Try sync `azure.identity` path (preferred).
-          3) Else try `azure.identity.aio` and **wrap** the provider so it's sync.
-          4) If neither import works, raise helpful ImportError.
         """
         # If explicit key path, don't build a provider.
         if self.authentication_method == AuthenticationMethod.TOKEN and self.api_key:
@@ -172,16 +168,14 @@ class AzureAuthConfig:
             elif self.authentication_method == AuthenticationMethod.MSI and self.client_id:
                 cred = SyncManagedIdentityCredential(client_id=str(self.client_id))
             else:
-                # DEFAULT or unspecified → DefaultAzureCredential
                 cred = SyncDefaultAzureCredential(
                     exclude_interactive_browser_credential=True
                 )
             return get_sync_bearer_token_provider(cred, scope)
         except Exception:
-            # Fall back to aio
             pass
 
-        # Try aio azure.identity.aio and wrap to sync callable
+        # Fall back to aio path and wrap in a sync callable
         try:
             from azure.identity.aio import (  # type: ignore
                 DefaultAzureCredential as AioDefaultAzureCredential,
@@ -209,20 +203,17 @@ class AzureAuthConfig:
                 )
             aio_provider = get_aio_bearer_token_provider(aio_cred, scope)
         except Exception as e:  # pragma: no cover
-            # Neither sync nor aio identity path is available
             raise ImportError(
                 "Async Azure OpenAI with AAD requires 'azure-identity'. "
                 "Install with: pip install azure-identity"
             ) from e
 
-        # Wrap the aio provider into a sync callable returning string
         def _sync_provider() -> str:
             token_or_coro = aio_provider()
             if inspect.isawaitable(token_or_coro):
                 try:
                     loop = asyncio.get_event_loop()
                     if loop.is_running():
-                        # Create a private loop to avoid 'running loop' errors
                         new_loop = asyncio.new_event_loop()
                         try:
                             return new_loop.run_until_complete(token_or_coro)  # type: ignore[return-value]
@@ -230,9 +221,7 @@ class AzureAuthConfig:
                             new_loop.close()
                     return loop.run_until_complete(token_or_coro)  # type: ignore[return-value]
                 except RuntimeError:
-                    # No loop set yet
                     return asyncio.run(token_or_coro)  # type: ignore[return-value]
-            # Some stubs may return a plain string (tests)
             return token_or_coro  # type: ignore[return-value]
 
         return _sync_provider
