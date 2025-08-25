@@ -10,6 +10,7 @@ Public API:
     - Various configuration model classes for type hints
 """
 
+from .auth_config import AzureAuthConfig
 from .environment import create_minimal_config, load_from_env_file
 from .main_settings import IngeniousSettings
 from .models import (
@@ -29,6 +30,7 @@ from .models import (
 )
 
 __all__ = [
+    "AzureAuthConfig",
     # Main settings class
     "IngeniousSettings",
     # Factory functions

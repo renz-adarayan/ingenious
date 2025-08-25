@@ -10,9 +10,10 @@ Custom models serve multiple critical functions:
 - **🔄 Serialization** - Convert between JSON, CSV, and Python objects
 - **📖 Documentation** - Self-documenting code with clear data contracts
 
-## 📊 **Example: Bike Sales Models (`bikes.py`)**
 
-The template includes a complete set of models for the bike insights workflow:
+## 📊 **Example: Bike Sales Models (`bike_insights/bikes.py`, `bike_insights/agent.py`)**
+
+The template includes a complete set of models for the bike insights workflow, now located in `models/bike_insights/bikes.py` and `models/bike_insights/agent.py`:
 
 ### **🚴 Core Models**
 ```python
@@ -247,29 +248,80 @@ def test_workflow_integration():
 
 ## 📋 **Model Organization Patterns**
 
-### **Single Domain File**
+
+### **Single Domain File (Before)**
 ```
 models/
 ├── bikes.py          # All bike-related models
+├── agent.py          # Bike agent logic
 ├── customers.py      # Customer and review models
 ├── analytics.py      # Reporting and metrics models
 └── __init__.py       # Import organization
 ```
 
-### **Modular Structure**
+
+
+### **Bike Insights Workflow**
 ```
 models/
-├── base/
-│   ├── __init__.py
-│   ├── common.py     # Shared base classes
-│   └── enums.py      # Common enumerations
-├── domain/
-│   ├── products.py   # Product models
-│   ├── sales.py      # Sales transaction models
-│   └── users.py      # User profile models
-└── workflows/
-    ├── payloads.py   # AI workflow input models
-    └── responses.py  # AI workflow output models
+├── bike_insights/
+│   ├── bikes.py          # All bike-related models
+│   ├── agent.py          # Bike agent logic
+│   ├── customers.py      # Customer and review models
+│   ├── analytics.py      # Reporting and metrics models
+│   └── __init__.py       # Import organization
+│   └── ...
+```
+
+---
+
+**🗂️ Custom Workflow Organization**
+
+Each custom workflow should have its own folder inside `models/`, like `bike_insights`. This keeps related models, agents, and logic organized and makes it easier to maintain and extend workflows. For example:
+
+```
+models/
+├── bike_insights/
+│   ├── bikes.py
+│   ├── agent.py
+│   └── ...
+├── restaurant_recommender/
+│   ├── restaurants.py
+│   ├── agent.py
+│   └── ...
+├── project_management/
+│   ├── projects.py
+│   ├── agent.py
+│   └── ...
+```
+
+This pattern ensures each workflow is modular and self-contained.
+
+
+
+### **Modular Structure (Example: bike_insights)**
+```
+models/
+├── bike_insights/
+│   ├── base/
+│   │   ├── __init__.py
+│   │   ├── common.py     # Shared base classes
+│   │   └── enums.py      # Common enumerations
+│   ├── domain/
+│   │   ├── bikes.py      # Product models
+│   │   ├── sales.py      # Sales transaction models
+│   │   └── users.py      # User profile models
+│   ├── workflows/
+│   │   ├── payloads.py   # AI workflow input models
+│   │   └── responses.py  # AI workflow output models
+│   ├── agent.py
+│   ├── customers.py
+│   ├── analytics.py
+│   └── __init__.py
+├── restaurant_recommender/
+│   ├── ...
+├── project_management/
+│   ├── ...
 ```
 
 ## 🔗 **Integration Points**

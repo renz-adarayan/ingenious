@@ -56,6 +56,11 @@ class AzureSqlConfig(BaseModel):
     )
 
 
+class CosmosConfig(BaseModel):
+    uri: str = Field(..., description="Azure Cosmos DB URI")
+    database_name: str = Field(..., description="Azure Cosmos DB database name")
+
+
 class WebConfig(BaseModel):
     ip_address: str = Field("0.0.0.0", description="IP address of the web server")
     port: int = Field(80, description="Port of the web server")

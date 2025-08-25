@@ -14,7 +14,7 @@ from autogen_core.models import (
     UserMessage,
 )
 
-from ingenious.common.utils import create_aoai_chat_completion_client_from_config
+from ingenious.client.azure import AzureClientFactory
 from ingenious.models.agent import (
     Agent,
     AgentChat,
@@ -29,7 +29,9 @@ class RoutedAssistantAgent(RoutedAgent, ABC):
         super().__init__(agent.agent_name)
 
         # Create the Azure OpenAI client using the provided model configuration
-        self._model_client = create_aoai_chat_completion_client_from_config(agent.model)
+        self._model_client = AzureClientFactory.create_openai_chat_completion_client(
+            agent.model
+        )
 
         assistant_agent = AssistantAgent(
             name=agent.agent_name,
@@ -180,7 +182,9 @@ class RoutedResponseOutputAgent(RoutedAgent, ABC):
         super().__init__(agent.agent_name)
         self._next_agent_topic = next_agent_topic
 
-        model_client = create_aoai_chat_completion_client_from_config(agent.model)
+        model_client = AzureClientFactory.create_openai_chat_completion_client(
+            agent.model
+        )
         assistant_agent = AssistantAgent(
             name=agent.agent_name,
             system_message=agent.system_prompt,

@@ -3,32 +3,31 @@ from typing import List, Optional
 from pydantic import BaseModel, Field, RootModel
 
 from ingenious.common.enums import AuthenticationMethod
+from ingenious.config.auth_config import AzureAuthConfig
 
 
-class ModelConfig(BaseModel):
+class ModelConfig(AzureAuthConfig, BaseModel):
     model: str
-    api_key: str = ""
     base_url: str
     deployment: str = ""
     api_version: str = ""
     deployment: str = ""
-    client_id: str = ""
-    client_secret: str = ""
-    tenant_id: str = ""
-    authentication_method: AuthenticationMethod = (
-        AuthenticationMethod.DEFAULT_CREDENTIAL
-    )
 
 
-class ChatHistoryConfig(BaseModel):
+class ChatHistoryConfig(AzureAuthConfig, BaseModel):
     database_connection_string: str = ""
 
 
-class AzureSqlConfig(BaseModel):
+class AzureSqlConfig(AzureAuthConfig, BaseModel):
     database_connection_string: str = ""
 
 
-class AzureSearchConfig(BaseModel):
+class CosmosConfig(AzureAuthConfig, BaseModel):
+    uri: str = Field(..., description="Azure Cosmos DB URI")
+    database_name: str = Field(..., description="Azure Cosmos DB database name")
+
+
+class AzureSearchConfig(AzureAuthConfig, BaseModel):
     service: str = "default"
     key: str = ""
 
@@ -62,14 +61,9 @@ class LoggingConfig(BaseModel):
     pass
 
 
-class FileStorageContainer(BaseModel):
+class FileStorageContainer(AzureAuthConfig, BaseModel):
     url: str = Field("", description="File Storage SAS URL")
-    client_id: str = Field("", description="File Storage SAS Client ID")
     token: str = Field("", description="File Storage SAS Token")
-    authentication_method: AuthenticationMethod = Field(
-        AuthenticationMethod.DEFAULT_CREDENTIAL,
-        description="File Storage SAS Authentication Method",
-    )
 
 
 class FileStorage(BaseModel):
@@ -109,6 +103,9 @@ class Profile(BaseModel):
     )
     azure_sql_services: Optional[AzureSqlConfig] = Field(
         default=None, description="Azure SQL services configuration (optional)"
+    )
+    cosmos_service: Optional[CosmosConfig] = Field(
+        default=None, description="Azure Cosmos DB service configuration (optional)"
     )
     web_configuration: WebConfig
     receiver_configuration: ReceiverConfig

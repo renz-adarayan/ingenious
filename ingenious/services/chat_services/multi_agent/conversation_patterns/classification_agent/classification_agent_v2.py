@@ -3,10 +3,8 @@ from typing import Tuple, cast
 from autogen_agentchat.agents import AssistantAgent, UserProxyAgent
 from autogen_agentchat.teams import RoundRobinGroupChat
 
+from ingenious.client.azure import AzureClientFactory
 from ingenious.common.enums import AuthenticationMethod
-from ingenious.common.utils import (
-    create_aoai_chat_completion_client_from_params,
-)
 from ingenious.config import get_config
 from ingenious.core.structured_logging import get_logger
 from ingenious.models.config import Config
@@ -31,17 +29,19 @@ class ConversationPattern:
         self.context = ""
 
         # Create Azure OpenAI model client from config
-        self.model_client = create_aoai_chat_completion_client_from_params(
-            model=str(self.default_llm_config["model"]),
-            base_url=str(self.default_llm_config["base_url"]),
-            api_version=str(self.default_llm_config["api_version"]),
-            deployment=str(self.default_llm_config.get("deployment")),
-            authentication_method=AuthenticationMethod(
-                self.default_llm_config.get(
-                    "authentication_method", AuthenticationMethod.DEFAULT_CREDENTIAL
-                )
-            ),
-            api_key=str(self.default_llm_config.get("api_key", "")),
+        self.model_client = (
+            AzureClientFactory.create_openai_chat_completion_client_from_params(
+                model=str(self.default_llm_config["model"]),
+                base_url=str(self.default_llm_config["base_url"]),
+                api_version=str(self.default_llm_config["api_version"]),
+                deployment=str(self.default_llm_config.get("deployment")),
+                authentication_method=AuthenticationMethod(
+                    self.default_llm_config.get(
+                        "authentication_method", AuthenticationMethod.DEFAULT_CREDENTIAL
+                    )
+                ),
+                api_key=str(self.default_llm_config.get("api_key", "")),
+            )
         )
 
         # Initialize memory manager for cloud storage support

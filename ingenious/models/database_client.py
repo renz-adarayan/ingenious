@@ -7,6 +7,7 @@ from typing import Any, List, Optional, Protocol
 class DatabaseClientType(enum.Enum):
     SQLITE = "sqlite"
     AZURESQL = "azuresql"
+    COSMOS = "cosmos"
 
 
 # Define an interface or base class for the database client

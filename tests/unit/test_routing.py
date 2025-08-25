@@ -41,7 +41,7 @@ class TestRouteManager:
         RouteManager.register_builtin_routes(mock_app)
 
         # Verify all routes were registered
-        assert mock_app.include_router.call_count == 6
+        assert mock_app.include_router.call_count == 7
 
         # Check specific route registrations
         calls = mock_app.include_router.call_args_list
@@ -75,6 +75,11 @@ class TestRouteManager:
         feedback_call = calls[5]
         assert feedback_call[1]["prefix"] == "/api/v1"
         assert feedback_call[1]["tags"] == ["Message Feedback"]
+
+        # Custom workflows route
+        feedback_call = calls[6]
+        assert feedback_call[1]["prefix"] == "/api/v1"
+        assert feedback_call[1]["tags"] == ["Custom Workflows"]
 
     @patch("ingenious.main.routing.import_module_with_fallback")
     def test_register_custom_routes_no_custom_module(self, mock_import_module):

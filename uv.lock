@@ -148,6 +148,12 @@ wheels = [
 ]
 
 [[package]]
+name = "ats"
+version = "1.0.8"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8c/dc/4c163be740a96069d099310838cdde05c59448050132b8f5b7e9ec550002/ATS-1.0.8.tar.gz", hash = "sha256:eba1482f35ff228670fc1ef0803949222157c987eb1ffe996bafc41783b75e35", size = 15521, upload-time = "2020-07-24T09:16:14.586Z" }
+
+[[package]]
 name = "attrs"
 version = "25.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1345,12 +1351,16 @@ wheels = [
 
 [[package]]
 name = "ingenious"
-version = "0.2.3"
+version = "0.2.4"
 source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
+    { name = "aiohttp" },
+    { name = "ats" },
     { name = "autogen-agentchat" },
     { name = "autogen-ext" },
+    { name = "azure-core" },
+    { name = "azure-cosmos" },
     { name = "azure-identity" },
     { name = "azure-keyvault-secrets" },
     { name = "azure-search-documents" },
@@ -1370,6 +1380,7 @@ dependencies = [
     { name = "pyodbc" },
     { name = "python-dotenv" },
     { name = "python-jose" },
+    { name = "rich" },
     { name = "structlog" },
     { name = "tiktoken" },
     { name = "typer" },
@@ -1563,13 +1574,17 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiofiles", specifier = ">=24.1.0" },
+    { name = "aiohttp", specifier = "==3.12.15" },
     { name = "aiosqlite", marker = "extra == 'core'", specifier = "==0.21.0" },
+    { name = "ats", specifier = ">=1.0.8" },
     { name = "autogen-agentchat", specifier = ">=0.5.7" },
     { name = "autogen-agentchat", marker = "extra == 'ai'", specifier = "==0.5.7" },
     { name = "autogen-ext", specifier = ">=0.5.7" },
     { name = "autogen-ext", extras = ["openai"], marker = "extra == 'ai'", specifier = "==0.5.7" },
     { name = "azure-ai-documentintelligence", marker = "extra == 'document-processing'", specifier = "==1.0.2" },
+    { name = "azure-core", specifier = "==1.34.0" },
     { name = "azure-core", marker = "extra == 'azure'", specifier = "==1.34.0" },
+    { name = "azure-cosmos", specifier = ">=4.9.0" },
     { name = "azure-cosmos", marker = "extra == 'azure'", specifier = "==4.9.0" },
     { name = "azure-identity", specifier = ">=1.17.1" },
     { name = "azure-identity", marker = "extra == 'azure'", specifier = "==1.17.1" },
@@ -1634,6 +1649,7 @@ requires-dist = [
     { name = "python-jose", extras = ["cryptography"], marker = "extra == 'auth'", specifier = "==3.5.0" },
     { name = "regex", marker = "extra == 'chunk'", specifier = "==2024.11.6" },
     { name = "reportlab", marker = "extra == 'test'", specifier = "==4.4.2" },
+    { name = "rich", specifier = "==13.7.1" },
     { name = "ruff", marker = "extra == 'test'", specifier = "==0.11.10" },
     { name = "scrapfly-sdk", marker = "extra == 'dataprep'", specifier = "==0.8.23" },
     { name = "seaborn", marker = "extra == 'visualization'", specifier = "==0.13.2" },
@@ -4003,15 +4019,15 @@ wheels = [
 
 [[package]]
 name = "rich"
-version = "14.0.0"
+version = "13.7.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "markdown-it-py" },
     { name = "pygments" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a1/53/830aa4c3066a8ab0ae9a9955976fb770fe9c6102117c8ec4ab3ea62d89e8/rich-14.0.0.tar.gz", hash = "sha256:82f1bc23a6a21ebca4ae0c45af9bdbc492ed20231dcb63f297d6d1021a9d5725", size = 224078, upload-time = "2025-03-30T14:15:14.23Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b3/01/c954e134dc440ab5f96952fe52b4fdc64225530320a910473c1fe270d9aa/rich-13.7.1.tar.gz", hash = "sha256:9be308cb1fe2f1f57d67ce99e95af38a1e2bc71ad9813b0e247cf7ffbcc3a432", size = 221248, upload-time = "2024-02-28T14:51:19.472Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0d/9b/63f4c7ebc259242c89b3acafdb37b41d1185c07ff0011164674e9076b491/rich-14.0.0-py3-none-any.whl", hash = "sha256:1c9491e1951aac09caffd42f448ee3d04e58923ffe14993f6e83068dc395d7e0", size = 243229, upload-time = "2025-03-30T14:15:12.283Z" },
+    { url = "https://files.pythonhosted.org/packages/87/67/a37f6214d0e9fe57f6ae54b2956d550ca8365857f42a1ce0392bb21d9410/rich-13.7.1-py3-none-any.whl", hash = "sha256:4edbae314f59eb482f54e9e30bf00d33350aaa94f4bfcd4e9e3110e64d0d7222", size = 240681, upload-time = "2024-02-28T14:51:14.353Z" },
 ]
 
 [[package]]

@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional
 
 from ingenious.config.settings import IngeniousSettings
 from ingenious.db.base_sql import BaseSQLRepository
+from ingenious.db.chat_history_repository import IChatHistoryRepository
 from ingenious.db.connection_pool import (
     AzureSQLConnectionFactory,
     ConnectionPool,
@@ -17,13 +18,15 @@ class RepositoryFactory:
     @staticmethod
     def create_chat_history_repository(
         db_type: DatabaseClientType, config: IngeniousSettings
-    ) -> BaseSQLRepository:
+    ) -> IChatHistoryRepository:
         """Create a chat history repository based on database type."""
 
         if db_type == DatabaseClientType.SQLITE:
             return RepositoryFactory._create_sqlite_repository(config)
         elif db_type == DatabaseClientType.AZURESQL:
             return RepositoryFactory._create_azuresql_repository(config)
+        elif db_type == DatabaseClientType.COSMOS:
+            return RepositoryFactory._create_cosmos_repository(config)
         else:
             raise ValueError(f"Unsupported database type: {db_type}")
 
@@ -41,6 +44,13 @@ class RepositoryFactory:
 
         return azuresql_ChatHistoryRepository(config)
 
+    @staticmethod
+    def _create_cosmos_repository(config: IngeniousSettings) -> IChatHistoryRepository:
+        """Create Cosmos DB repository with proper dependencies."""
+        from ingenious.db.cosmos import cosmos_ChatHistoryRepository
+
+        return cosmos_ChatHistoryRepository(config)
+
 
 class ModernRepositoryFactory:
     """Modern factory that creates repositories using composition pattern directly."""
@@ -48,13 +58,15 @@ class ModernRepositoryFactory:
     @staticmethod
     def create_chat_history_repository(
         db_type: DatabaseClientType, config: IngeniousSettings
-    ) -> BaseSQLRepository:
+    ) -> IChatHistoryRepository:
         """Create a repository using composition pattern."""
 
         if db_type == DatabaseClientType.SQLITE:
             return ModernRepositoryFactory._create_sqlite_repository(config)
         elif db_type == DatabaseClientType.AZURESQL:
             return ModernRepositoryFactory._create_azuresql_repository(config)
+        elif db_type == DatabaseClientType.COSMOS:
+            return ModernRepositoryFactory._create_cosmos_repository(config)
         else:
             raise ValueError(f"Unsupported database type: {db_type}")
 
@@ -98,6 +110,15 @@ class ModernRepositoryFactory:
         query_builder = QueryBuilder(AzureSQLDialect())
 
         return AzureSQLChatHistoryRepository(config, query_builder, connection_pool)
+
+    @staticmethod
+    def _create_cosmos_repository(
+        config: IngeniousSettings,
+    ) -> IChatHistoryRepository:
+        """Create Cosmos DB repository using composition."""
+        from ingenious.db.cosmos import cosmos_ChatHistoryRepository
+
+        return cosmos_ChatHistoryRepository(config)
 
 
 class SQLiteChatHistoryRepository(BaseSQLRepository):

@@ -17,6 +17,7 @@ from .models import (
     AzureSqlSettings,
     ChatHistorySettings,
     ChatServiceSettings,
+    CosmosSettings,
     FileStorageSettings,
     LocalSqlSettings,
     LoggingSettings,
@@ -103,6 +104,10 @@ class IngeniousSettings(BaseSettings):
 
     azure_sql_services: Optional[AzureSqlSettings] = Field(
         default=None, description="Azure SQL service configuration (optional)"
+    )
+
+    cosmos_service: Optional[CosmosSettings] = Field(
+        default=None, description="Azure Cosmos DB service configuration (optional)"
     )
 
     @field_validator("models", mode="before")
