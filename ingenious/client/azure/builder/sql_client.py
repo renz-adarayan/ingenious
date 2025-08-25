@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Optional, Union
 
 import pyodbc
@@ -24,7 +26,7 @@ class AzureSqlClientBuilder(AzureClientBuilder):
 
         return AzureAuthConfig.from_config(sql_config)
 
-    def build(self) -> pyodbc.Connection:
+    def build(self) -> "pyodbc.Connection":
         """
         Build Azure SQL client based on SQL configuration.
 
@@ -70,7 +72,7 @@ class AzureSqlClientBuilderWithAuth(AzureClientBuilder):
         self.client_secret = client_secret
         self.tenant_id = tenant_id
 
-    def build(self) -> pyodbc.Connection:
+    def build(self) -> "pyodbc.Connection":
         """
         Build Azure SQL client based on configuration with authentication.
 

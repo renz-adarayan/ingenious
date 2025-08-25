@@ -22,10 +22,12 @@ classifiers = [
 requires-python = ">=3.13"
 # Minimal core dependencies - essential for basic library functionality
 dependencies = [
+  "aiohttp==3.12.15",
   "aiofiles>=24.1.0",
   "ats>=1.0.8",
   "autogen-agentchat>=0.5.7",
   "autogen-ext>=0.5.7",
+  "azure-core==1.34.0",
   "azure-cosmos>=4.9.0",
   "azure-identity>=1.17.1",
   "azure-keyvault-secrets>=4.10.0",
@@ -46,6 +48,7 @@ dependencies = [
   "pyodbc>=5.2.0",
   "python-dotenv>=1.0.1",
   "python-jose>=3.5.0",
+  "rich==13.7.1",
   "structlog==25.4.0",
   "tiktoken>=0.9.0",
   "typer==0.16.0",
@@ -334,6 +337,7 @@ addopts = [
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
+  "azure_integration: marks tests that hit live Azure resources and require real creds",
   "unit: Unit tests (no external dependencies)",
   "integration: Integration tests (internal components only)",
   "slow: Slow-running tests",
