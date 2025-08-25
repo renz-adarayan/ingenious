@@ -3,6 +3,7 @@ Tests for ingenious.utils.stage_executor module
 """
 
 import asyncio
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -24,7 +25,7 @@ class MockActionCallable(IActionCallable):
         self.delay = delay
         self.should_fail = should_fail
         self.call_count = 0
-        self.last_kwargs = {}
+        self.last_kwargs: dict[str, Any] = {}
 
     async def __call__(
         self, progress: ProgressConsoleWrapper, task_id: TaskID, **kwargs

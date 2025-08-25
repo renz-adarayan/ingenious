@@ -8,6 +8,10 @@ from __future__ import annotations
 
 import importlib
 import os
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ingenious.config.models import IngeniousSettings
 import pkgutil
 from pathlib import Path
 from sysconfig import get_paths
@@ -30,7 +34,7 @@ load_dotenv()
 logger = get_logger(__name__)
 
 
-def make_app(config):
+def make_app(config: IngeniousSettings):
     # keep the import late so your env var ordering still works
     from ingenious.main import create_app
 

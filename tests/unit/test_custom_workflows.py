@@ -1,4 +1,3 @@
-import json
 from unittest.mock import Mock, patch
 
 import pytest
@@ -141,15 +140,13 @@ class TestGetCustomWorkflowSchema:
         mock_import.return_value = mock_module
         mock_getmembers.return_value = [("TestModel", mock_pydantic_model)]
         result = await get_custom_workflow_schema("test-workflow", mock_request)
-        # Assertions
-        assert result.status_code == 200
-        content = json.loads(result.body)
-        assert content["workflow_name"] == "test-workflow"
-        assert "schemas" in content
-        assert "metadata" in content
-        assert content["metadata"]["total_models"] >= 1
-        assert content["metadata"]["features"]["validation"] is True
-        assert "generated_at" in content["metadata"]
+        # Assertions - result is a dict, not a response object
+        assert result["workflow_name"] == "test-workflow"
+        assert "schemas" in result
+        assert "metadata" in result
+        assert result["metadata"]["total_models"] >= 1
+        assert result["metadata"]["features"]["validation"] is True
+        assert "generated_at" in result["metadata"]
 
     @pytest.mark.asyncio
     @patch("ingenious.api.routes.custom_workflows.normalize_workflow_name")
@@ -196,7 +193,6 @@ class TestGetCustomWorkflowSchema:
         mock_import.return_value = mock_module
         mock_getmembers.return_value = [("Model1", Model1), ("Model2", Model2)]
         result = await get_custom_workflow_schema("test-workflow", mock_request)
-        # Check that both models are included
-        content = json.loads(result.body)
-        assert content["metadata"]["total_models"] == 2
-        assert "Model1" in content["schemas"] or "Model2" in content["schemas"]
+        # Check that both models are included - result is a dict, not a response object
+        assert result["metadata"]["total_models"] == 2
+        assert "Model1" in result["schemas"] or "Model2" in result["schemas"]
