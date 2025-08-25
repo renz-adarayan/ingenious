@@ -31,7 +31,9 @@ class AzureOpenAIClientBuilder(AzureClientBuilder):
         super().__init__(auth_config=auth_config)
         self.model_config = model_config
 
-    def _create_auth_config_from_model_config(self, model_config: Union[ModelConfig, ModelSettings]) -> AzureAuthConfig:
+    def _create_auth_config_from_model_config(
+        self, model_config: Union[ModelConfig, ModelSettings]
+    ) -> AzureAuthConfig:
         """Create AzureAuthConfig from model configuration."""
         return AzureAuthConfig.from_config(model_config)
 

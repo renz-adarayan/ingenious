@@ -1,5 +1,4 @@
-"""
-Create Azure AI service clients via the central factory (async).
+"""Create Azure AI service clients via the central factory (async).
 
 This module provides the single seam the codebase and tests patch to inject
 Azure clients. It deliberately keeps import-time light and avoids pulling the
@@ -31,11 +30,14 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, TYPE_CHECKING, cast
+import logging
+from importlib import import_module
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from azure.search.documents.aio import SearchClient
     from openai import AsyncAzureOpenAI
+
     from .config import SearchConfig
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -46,19 +48,43 @@ AzureClientFactory: Any | None = None  # patched by tests
 
 __all__ = ["make_async_search_client", "make_async_openai_client"]
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Constants
+# ─────────────────────────────────────────────────────────────────────────────
+LOGGER_NAME = "ingenious.services.azure_search.client_init"
+DEFAULT_OPENAI_MAX_RETRIES = 3
+ALLOWED_OPENAI_OPTION_KEYS: set[str] = {
+    "max_retries",
+    "timeout",
+    "connect_timeout",
+    "read_timeout",
+    "transport",
+    "http_client",
+}
 
-import logging
-log = logging.getLogger("ingenious.services.azure_search.client_init")
+log = logging.getLogger(LOGGER_NAME)
+
 
 def _get_factory() -> Any:
+    """Resolve and return the Azure client factory class.
+
+    Uses the patched `AzureClientFactory` when provided by tests; otherwise,
+    lazily imports the production factory to minimize import-time overhead.
+
+    Returns:
+        The factory class used to create concrete Azure clients.
+    """
     if AzureClientFactory is not None:
         log.debug("Using patched AzureClientFactory: %s", AzureClientFactory)
         return AzureClientFactory
-    from ingenious.client.azure import AzureClientFactory as _F  # type: ignore[import-not-found]
+
+    module = import_module("ingenious.client.azure")
+    _F = getattr(module, "AzureClientFactory")
     log.debug("Using production AzureClientFactory: %s", _F)
     return _F
 
-def _normalize_openai_options(client_options: Dict[str, Any]) -> Dict[str, Any]:
+
+def _normalize_openai_options(client_options: dict[str, Any]) -> dict[str, Any]:
     """Normalize and validate options forwarded to the OpenAI client factory.
 
     Behavior/contract (mirrors test expectations):
@@ -77,22 +103,12 @@ def _normalize_openai_options(client_options: Dict[str, Any]) -> Dict[str, Any]:
         ValueError: If `max_retries`/`retries` specifies a negative value.
         ValueError: If a non-integer value is provided for retries.
     """
-    # Supported pass-through options for the OpenAI client.
-    allowed_keys: set[str] = {
-        "max_retries",
-        "timeout",
-        "connect_timeout",
-        "read_timeout",
-        "transport",
-        "http_client",
-    }
-
-    out: Dict[str, Any] = {}
+    out: dict[str, Any] = {}
 
     # Normalize retries (support alias and default).
     raw_max = client_options.get("max_retries", client_options.get("retries", None))
     if raw_max is None:
-        max_retries: int = 3
+        max_retries: int = DEFAULT_OPENAI_MAX_RETRIES
     else:
         max_retries = int(raw_max)  # may raise ValueError; let it bubble
     if max_retries < 0:
@@ -100,7 +116,7 @@ def _normalize_openai_options(client_options: Dict[str, Any]) -> Dict[str, Any]:
     out["max_retries"] = max_retries
 
     # Copy only allowed remaining options.
-    for k in allowed_keys:
+    for k in ALLOWED_OPENAI_OPTION_KEYS:
         if k == "max_retries":
             continue
         if k in client_options:
@@ -109,15 +125,19 @@ def _normalize_openai_options(client_options: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def make_async_search_client(cfg: "SearchConfig", **client_options: Any) -> "SearchClient":
+def make_async_search_client(
+    cfg: "SearchConfig", **client_options: Any
+) -> "SearchClient":
     """Create the async Azure Search client via the selected factory.
 
-    Any keyword args in `client_options` are forwarded verbatim to the underlying SDK
-    constructor through the factory. The Azure Search SDK usually validates these.
+    Any keyword args in `client_options` are forwarded verbatim to the underlying
+    SDK constructor through the factory. The Azure Search SDK usually validates
+    these.
 
     Args:
         cfg: Validated `SearchConfig`.
-        **client_options: Optional Azure SDK configuration (timeouts, retries, etc.).
+        **client_options: Optional Azure SDK configuration (timeouts, retries,
+            etc.).
 
     Returns:
         An instance of the async `SearchClient`.
@@ -136,7 +156,9 @@ def make_async_search_client(cfg: "SearchConfig", **client_options: Any) -> "Sea
     )
 
 
-def make_async_openai_client(cfg: "SearchConfig", **client_options: Any) -> "AsyncAzureOpenAI":
+def make_async_openai_client(
+    cfg: "SearchConfig", **client_options: Any
+) -> "AsyncAzureOpenAI":
     """Create the async Azure OpenAI client via the selected factory.
 
     Behavior:
@@ -149,7 +171,8 @@ def make_async_openai_client(cfg: "SearchConfig", **client_options: Any) -> "Asy
         cfg: Validated `SearchConfig`.
         **client_options: Optional OpenAI client options. Supported keys include:
             - max_retries (int), retries (alias), timeout (float),
-              connect_timeout (float), read_timeout (float), transport/http_client.
+              connect_timeout (float), read_timeout (float),
+              transport/http_client.
 
     Returns:
         An instance of `AsyncAzureOpenAI`.
@@ -158,7 +181,7 @@ def make_async_openai_client(cfg: "SearchConfig", **client_options: Any) -> "Asy
         ValueError: If a negative retry count is provided or parsing fails.
     """
     factory = _get_factory()
-    normalized: Dict[str, Any] = _normalize_openai_options(dict(client_options))
+    normalized: dict[str, Any] = _normalize_openai_options(dict(client_options))
 
     return cast(
         "AsyncAzureOpenAI",

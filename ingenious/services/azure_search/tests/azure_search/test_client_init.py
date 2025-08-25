@@ -217,7 +217,10 @@ def _make_cfg(**overrides: Any) -> SearchConfig:
 #                                      TESTS
 # --------------------------------------------------------------------------------------
 
-def test_make_async_search_client_uses_secretstr(monkeypatch: pytest.MonkeyPatch) -> None:
+
+def test_make_async_search_client_uses_secretstr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
     Ensure `make_async_search_client` unwraps SecretStr for the AzureKeyCredential and maps fields.
 
@@ -259,9 +262,9 @@ def test_make_async_openai_client_maps_version_and_max_retries(
 
     assert isinstance(oc, d["AsyncAzureOpenAI"])
     assert oc.azure_endpoint == cfg.openai_endpoint
-    assert oc.api_key == "openai-secret"            # SecretStr unwrapped
-    assert oc.api_version == "2025-01-01"           # explicit version mapped
-    assert oc.max_retries == 3                      # default applied by builder
+    assert oc.api_key == "openai-secret"  # SecretStr unwrapped
+    assert oc.api_version == "2025-01-01"  # explicit version mapped
+    assert oc.max_retries == 3  # default applied by builder
 
 
 def test_make_async_openai_client_respects_explicit_max_retries(
@@ -333,7 +336,9 @@ def test_make_async_search_client_forwards_client_options(
     client_init, d = _reload_client_init_with_dummies(monkeypatch)
     cfg = _make_cfg()
 
-    sc: Any = client_init.make_async_search_client(cfg, http_logging_policy=True, my_opt=123)
+    sc: Any = client_init.make_async_search_client(
+        cfg, http_logging_policy=True, my_opt=123
+    )
 
     assert isinstance(sc, d["SearchClient"])
     assert sc.extra_kwargs.get("http_logging_policy") is True

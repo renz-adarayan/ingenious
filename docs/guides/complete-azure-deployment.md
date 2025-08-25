@@ -249,7 +249,7 @@ uv run ingen validate
 uv run ingen validate
 ```
 
-> **⚠️ BREAKING CHANGE**  
+> **⚠️ BREAKING CHANGE**
 > Ingenious now uses **pydantic-settings** for configuration via environment
 > variables. Legacy YAML files (`config.yml`, `profiles.yml`) are **no longer
 > supported**. Migrate with:
@@ -339,12 +339,12 @@ curl -X POST "http://localhost:8000/api/v1/prompts/update/quickstart-1/bike_look
 
 ## Troubleshooting
 
-- **Azure AI Search policy errors**  
-  `PreflightError: [azure_search] policy: Azure Search is required…`  
+- **Azure AI Search policy errors**
+  `PreflightError: [azure_search] policy: Azure Search is required…`
   → Ensure `INGENIOUS_AZURE_SEARCH_SERVICES__0__...` variables are set and
   `INGENIOUS_SEARCH__POLICY="azure_only"` (or set KB policy accordingly).
 
-- **404/401/403 from Azure Search**  
+- **404/401/403 from Azure Search**
   → Check `INDEX_NAME`, `ENDPOINT`, and `KEY`.
 
 - **Sanity check your Search index** (replace placeholders):
@@ -355,13 +355,13 @@ curl -X POST "http://localhost:8000/api/v1/prompts/update/quickstart-1/bike_look
   # Expect: HTTP/1.1 200 OK
   ```
 
-- **Blob auth issues**  
+- **Blob auth issues**
   → Confirm each storage block sets `AUTHENTICATION_METHOD="token"` and
   `TOKEN="${AZURE_STORAGE_CONNECTION_STRING}".`
 
-- **Port conflicts**  
+- **Port conflicts**
   → Change `INGENIOUS_WEB_CONFIGURATION__PORT` or pass `--port` to `serve`.
-  
+
 ---
 
 ## Security Notes

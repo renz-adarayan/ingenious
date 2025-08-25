@@ -18,7 +18,6 @@ from __future__ import annotations
 import importlib
 import sys
 from types import ModuleType
-from typing import Any
 
 import pytest
 
@@ -44,7 +43,9 @@ def _reload(module_name: str) -> ModuleType:
 
 def test_async_search_builder_api_key_path() -> None:
     """Build async Search client via API key and assert core properties."""
-    builder_mod: ModuleType = _reload("ingenious.client.azure.builder.search_client_async")
+    builder_mod: ModuleType = _reload(
+        "ingenious.client.azure.builder.search_client_async"
+    )
     AzureSearchAsyncClientBuilder = builder_mod.AzureSearchAsyncClientBuilder  # type: ignore[attr-defined]
 
     cfg: dict[str, str] = {
@@ -54,7 +55,9 @@ def test_async_search_builder_api_key_path() -> None:
     b = AzureSearchAsyncClientBuilder.from_config(cfg, index_name="idx")
     client = b.build()
 
-    from azure.core.credentials import AzureKeyCredential  # type: ignore[import-untyped]  # stubbed
+    from azure.core.credentials import (
+        AzureKeyCredential,  # type: ignore[import-untyped]  # stubbed
+    )
 
     assert client.endpoint == "https://example.search.windows.net"
     assert client.index_name == "idx"
@@ -63,7 +66,9 @@ def test_async_search_builder_api_key_path() -> None:
 
 def test_async_search_builder_prefers_token_over_key() -> None:
     """Prefer TokenCredential over API key when both are supplied."""
-    builder_mod: ModuleType = _reload("ingenious.client.azure.builder.search_client_async")
+    builder_mod: ModuleType = _reload(
+        "ingenious.client.azure.builder.search_client_async"
+    )
     AzureSearchAsyncClientBuilder = builder_mod.AzureSearchAsyncClientBuilder  # type: ignore[attr-defined]
 
     # Provide BOTH SP credentials and a key; must prefer TokenCredential (AAD)
@@ -79,7 +84,9 @@ def test_async_search_builder_prefers_token_over_key() -> None:
     )
     client = b.build()
 
-    from azure.identity.aio import ClientSecretCredential  # type: ignore[import-untyped]  # stubbed
+    from azure.identity.aio import (
+        ClientSecretCredential,  # type: ignore[import-untyped]  # stubbed
+    )
 
     assert isinstance(client.credential, ClientSecretCredential)
     assert client.kwargs.get("user_agent") == "ua"
@@ -87,7 +94,9 @@ def test_async_search_builder_prefers_token_over_key() -> None:
 
 def test_async_search_builder_service_fallback_builds_endpoint() -> None:
     """Construct endpoint from `service` when full endpoint not provided."""
-    builder_mod: ModuleType = _reload("ingenious.client.azure.builder.search_client_async")
+    builder_mod: ModuleType = _reload(
+        "ingenious.client.azure.builder.search_client_async"
+    )
     AzureSearchAsyncClientBuilder = builder_mod.AzureSearchAsyncClientBuilder  # type: ignore[attr-defined]
 
     cfg: dict[str, str] = {"service": "mysearchacct", "search_key": "S_KEY"}
@@ -100,7 +109,9 @@ def test_async_search_builder_service_fallback_builds_endpoint() -> None:
 
 def test_async_openai_builder_api_key_path() -> None:
     """Build Async Azure OpenAI client via API key and assert properties."""
-    builder_mod: ModuleType = _reload("ingenious.client.azure.builder.openai_client_async")
+    builder_mod: ModuleType = _reload(
+        "ingenious.client.azure.builder.openai_client_async"
+    )
     AsyncAzureOpenAIClientBuilder = builder_mod.AsyncAzureOpenAIClientBuilder  # type: ignore[attr-defined]
 
     cfg: dict[str, str] = {
@@ -119,10 +130,14 @@ def test_async_openai_builder_api_key_path() -> None:
 
 def test_async_openai_builder_aad_path() -> None:
     """Build Async Azure OpenAI client via AAD when no key is provided."""
-    builder_mod: ModuleType = _reload("ingenious.client.azure.builder.openai_client_async")
+    builder_mod: ModuleType = _reload(
+        "ingenious.client.azure.builder.openai_client_async"
+    )
     AsyncAzureOpenAIClientBuilder = builder_mod.AsyncAzureOpenAIClientBuilder  # type: ignore[attr-defined]
 
-    cfg: dict[str, str] = {"openai_endpoint": "https://example.openai.azure.com"}  # no key => use AAD default
+    cfg: dict[str, str] = {
+        "openai_endpoint": "https://example.openai.azure.com"
+    }  # no key => use AAD default
     b = AsyncAzureOpenAIClientBuilder.from_config(cfg, api_version="2024-02-01")
     client = b.build()
 
@@ -173,7 +188,9 @@ async def test_create_async_search_client_prefers_token() -> None:
     }
     client = AzureClientFactory.create_async_search_client(index_name="idx", config=cfg)
 
-    from azure.identity.aio import ClientSecretCredential  # type: ignore[import-untyped]
+    from azure.identity.aio import (
+        ClientSecretCredential,  # type: ignore[import-untyped]
+    )
 
     assert isinstance(client.credential, ClientSecretCredential)
     # Exercise async method to satisfy pytest-asyncio path

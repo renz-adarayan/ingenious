@@ -23,7 +23,10 @@ def __getattr__(name: str) -> Any:
     if name in ("BlobClientBuilder", "BlobServiceClientBuilder"):
         from .blob_client import BlobClientBuilder, BlobServiceClientBuilder
 
-        return {"BlobClientBuilder": BlobClientBuilder, "BlobServiceClientBuilder": BlobServiceClientBuilder}[name]
+        return {
+            "BlobClientBuilder": BlobClientBuilder,
+            "BlobServiceClientBuilder": BlobServiceClientBuilder,
+        }[name]
 
     if name == "AzureOpenAIClientBuilder":
         from .openai_client import AzureOpenAIClientBuilder
@@ -31,7 +34,9 @@ def __getattr__(name: str) -> Any:
         return AzureOpenAIClientBuilder
 
     if name == "AzureOpenAIChatCompletionClientBuilder":
-        from .openai_chat_completions_client import AzureOpenAIChatCompletionClientBuilder
+        from .openai_chat_completions_client import (
+            AzureOpenAIChatCompletionClientBuilder,
+        )
 
         return AzureOpenAIChatCompletionClientBuilder
 

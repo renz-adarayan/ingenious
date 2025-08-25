@@ -124,20 +124,25 @@ async def test_retry_on_429_then_success() -> None:
     assert client.attempts == 3, "Expected 2 internal retries (3 total attempts)"
     assert isinstance(docs, list) and docs and docs[0]["content"] == "ok"
 
+
 class _FlakyEmbeddings:
     async def create(self, *args, **kwargs):
         exc = RuntimeError("429 Too Many Requests")
         setattr(exc, "status_code", 429)
         raise exc
 
+
 class _NoopSearch:
     async def search(self, *args, **kwargs):
         raise AssertionError("search() should not be reached")
+
 
 @pytest.mark.asyncio
 async def test_vector_embed_429_fallback_or_retry(config):
     # 👇 Make the client look like OpenAI: client.embeddings.create(...)
     emb_client = SimpleNamespace(embeddings=_FlakyEmbeddings())
-    retr = AzureSearchRetriever(config, search_client=_NoopSearch(), embedding_client=emb_client)
+    retr = AzureSearchRetriever(
+        config, search_client=_NoopSearch(), embedding_client=emb_client
+    )
     with pytest.raises(RuntimeError):
         await retr.search_vector("q")

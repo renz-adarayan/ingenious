@@ -21,11 +21,11 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Any, List, Tuple
 from types import SimpleNamespace
+from typing import Any, List, Tuple
+from unittest.mock import patch
 
 import pytest
-from unittest.mock import patch
 
 from ingenious.config.main_settings import IngeniousSettings
 from ingenious.config.models import AzureSearchSettings, ModelSettings
@@ -183,7 +183,9 @@ def _settings() -> IngeniousSettings:
 
 
 @pytest.mark.asyncio
-async def test_provider_retrieve_instantiates_search_client_via_client_init_with_aad() -> None:
+async def test_provider_retrieve_instantiates_search_client_via_client_init_with_aad() -> (
+    None
+):
     """Verify provider.retrieve builds clients via factory and completes.
 
     What:
@@ -211,13 +213,19 @@ async def test_provider_retrieve_instantiates_search_client_via_client_init_with
     # Patch at BOTH import sites:
     # - provider.make_async_search_client (the provider's L2/rerank client)
     # - client_init.make_async_search_client + client_init.make_async_openai_client (pipeline)
-    with patch(
-        "ingenious.services.azure_search.provider.make_async_search_client", new=_mk_sc
-    ), patch(
-        "ingenious.services.azure_search.client_init.make_async_search_client", new=_mk_sc
-    ), patch(
-        "ingenious.services.azure_search.client_init.make_async_openai_client",
-        new=_mk_aoai,
+    with (
+        patch(
+            "ingenious.services.azure_search.provider.make_async_search_client",
+            new=_mk_sc,
+        ),
+        patch(
+            "ingenious.services.azure_search.client_init.make_async_search_client",
+            new=_mk_sc,
+        ),
+        patch(
+            "ingenious.services.azure_search.client_init.make_async_openai_client",
+            new=_mk_aoai,
+        ),
     ):
         provider = AzureSearchProvider(_settings(), enable_answer_generation=False)
 
@@ -236,7 +244,9 @@ async def test_provider_retrieve_instantiates_search_client_via_client_init_with
         "This placeholder remains until token-based Search credential support is added."
     )
 )
-def test_provider_prefers_token_credential_when_both_key_and_client_credentials_provided() -> None:
+def test_provider_prefers_token_credential_when_both_key_and_client_credentials_provided() -> (
+    None
+):
     """Placeholder: would assert token credential preferred when both are present.
 
     Why:

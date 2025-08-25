@@ -36,7 +36,10 @@ def _make_settings() -> IngeniousSettings:
     ]
     s.azure_search_services = [
         AzureSearchSettings(
-            service="svc", endpoint="https://search.example.net", key="SK", index_name="idx"
+            service="svc",
+            endpoint="https://search.example.net",
+            key="SK",
+            index_name="idx",
         )
     ]
     return s
@@ -135,7 +138,9 @@ async def test_provider_answer_raises_when_generation_disabled(
 
 
 @pytest.mark.asyncio
-async def test_provider_answer_passes_query_unmodified(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_provider_answer_passes_query_unmodified(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = _make_settings()
 
     captured: dict[str, str] = {}

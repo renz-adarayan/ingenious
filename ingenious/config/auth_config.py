@@ -116,7 +116,9 @@ class AzureAuthConfig:
         # Set optional fields via object.__setattr__ to be safe on all instances
         object.__setattr__(inst, "openai_key", api_key)
         object.__setattr__(inst, "openai_endpoint", endpoint)
-        object.__setattr__(inst, "api_version", str(api_version) if api_version else None)
+        object.__setattr__(
+            inst, "api_version", str(api_version) if api_version else None
+        )
         return inst
 
     def validate_for_method(self) -> None:
@@ -147,10 +149,16 @@ class AzureAuthConfig:
 
         # Try sync azure.identity first
         try:
+            from azure.identity import (
+                ClientSecretCredential as SyncClientSecretCredential,
+            )
             from azure.identity import (  # type: ignore
                 DefaultAzureCredential as SyncDefaultAzureCredential,
-                ClientSecretCredential as SyncClientSecretCredential,
+            )
+            from azure.identity import (
                 ManagedIdentityCredential as SyncManagedIdentityCredential,
+            )
+            from azure.identity import (
                 get_bearer_token_provider as get_sync_bearer_token_provider,
             )
 
@@ -165,7 +173,10 @@ class AzureAuthConfig:
                     client_id=str(self.client_id),
                     client_secret=str(self.client_secret),
                 )
-            elif self.authentication_method == AuthenticationMethod.MSI and self.client_id:
+            elif (
+                self.authentication_method == AuthenticationMethod.MSI
+                and self.client_id
+            ):
                 cred = SyncManagedIdentityCredential(client_id=str(self.client_id))
             else:
                 cred = SyncDefaultAzureCredential(
@@ -177,10 +188,16 @@ class AzureAuthConfig:
 
         # Fall back to aio path and wrap in a sync callable
         try:
+            from azure.identity.aio import (
+                ClientSecretCredential as AioClientSecretCredential,
+            )
             from azure.identity.aio import (  # type: ignore
                 DefaultAzureCredential as AioDefaultAzureCredential,
-                ClientSecretCredential as AioClientSecretCredential,
+            )
+            from azure.identity.aio import (
                 ManagedIdentityCredential as AioManagedIdentityCredential,
+            )
+            from azure.identity.aio import (
                 get_bearer_token_provider as get_aio_bearer_token_provider,
             )
 
@@ -195,7 +212,10 @@ class AzureAuthConfig:
                     client_id=str(self.client_id),
                     client_secret=str(self.client_secret),
                 )
-            elif self.authentication_method == AuthenticationMethod.MSI and self.client_id:
+            elif (
+                self.authentication_method == AuthenticationMethod.MSI
+                and self.client_id
+            ):
                 aio_cred = AioManagedIdentityCredential(client_id=str(self.client_id))
             else:
                 aio_cred = AioDefaultAzureCredential(

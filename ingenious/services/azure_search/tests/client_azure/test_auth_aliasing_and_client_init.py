@@ -15,7 +15,7 @@ from __future__ import annotations
 import importlib
 import sys
 import types
-from typing import Any, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import SecretStr
 
@@ -74,10 +74,14 @@ def test_client_init_delegates_to_factory(monkeypatch: "MonkeyPatch") -> None:
     Args:
         monkeypatch: Pytest fixture used to patch attributes during the test.
     """
-    fac_mod: Any = cast(Any, _reload("ingenious.client.azure.azure_client_builder_factory"))
+    fac_mod: Any = cast(
+        Any, _reload("ingenious.client.azure.azure_client_builder_factory")
+    )
     called: dict[str, bool] = {"search": False, "openai": False}
 
-    def fake_search(index_name: str, config: dict[str, Any] | None = None, **opts: Any) -> object:
+    def fake_search(
+        index_name: str, config: dict[str, Any] | None = None, **opts: Any
+    ) -> object:
         """Return a sentinel for search client creation and mark invocation.
 
         Args:

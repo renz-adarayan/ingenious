@@ -18,15 +18,15 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-from ingenious.services.azure_search.builders import build_search_config_from_settings
 from ingenious.services.azure_search import build_search_pipeline
-from ingenious.services.retrieval.errors import GenerationDisabledError
+from ingenious.services.azure_search.builders import build_search_config_from_settings
 
 # ---- Re-exports for existing tests to monkeypatch at this module path ----
 from ingenious.services.azure_search.client_init import (  # noqa: F401
     make_async_openai_client,
     make_async_search_client,
 )
+from ingenious.services.retrieval.errors import GenerationDisabledError
 
 try:  # Some tests patch this symbol on the provider module
     from azure.search.documents.models import QueryType  # noqa: F401
@@ -35,8 +35,10 @@ except Exception:  # pragma: no cover - tests may stub this anyway
 
 if TYPE_CHECKING:
     from ingenious.config import IngeniousSettings
+    from ingenious.services.azure_search.components.pipeline import (
+        AdvancedSearchPipeline,
+    )
     from ingenious.services.azure_search.config import SearchConfig
-    from ingenious.services.azure_search.components.pipeline import AdvancedSearchPipeline
 
 logger = logging.getLogger("ingenious.services.azure_search.provider")
 
@@ -68,7 +70,9 @@ class AzureSearchProvider:
             cfg = build_search_config_from_settings(settings_or_config)
 
         if enable_answer_generation is not None:
-            cfg = cfg.copy(update={"enable_answer_generation": bool(enable_answer_generation)})
+            cfg = cfg.copy(
+                update={"enable_answer_generation": bool(enable_answer_generation)}
+            )
 
         self._cfg = cfg
         self._pipeline = pipeline or build_search_pipeline(cfg)
@@ -102,9 +106,13 @@ class AzureSearchProvider:
         # ---- 3a. Lexical fallback via retriever ---------------------------------
         lex: List[Dict[str, Any]] = []
         try:
-            logger.debug("Provider.retrieve – calling retriever.search_lexical(%r)", query)
+            logger.debug(
+                "Provider.retrieve – calling retriever.search_lexical(%r)", query
+            )
             lex = await self._pipeline.retriever.search_lexical(query)
-            logger.debug("Provider.retrieve – lexical fallback returned %d rows", len(lex))
+            logger.debug(
+                "Provider.retrieve – lexical fallback returned %d rows", len(lex)
+            )
         except Exception as exc:
             logger.debug(
                 "Provider.retrieve – lexical fallback failed; will try last‑mile client search.",
@@ -144,21 +152,31 @@ class AzureSearchProvider:
                     cleaner = getattr(self._pipeline, "_clean_sources", None)
                     return cleaner(raw) if callable(cleaner) else raw
             except Exception as exc:
-                logger.debug("Provider.retrieve – last‑mile client search failed.", exc_info=exc)
+                logger.debug(
+                    "Provider.retrieve – last‑mile client search failed.", exc_info=exc
+                )
 
         # ---- 3c. Factory-created one-shot client (only when seam is patched) ----
         if limit > 0:
             try:
                 from . import client_init as _ci  # local import to avoid cycles
+
                 factory = getattr(_ci, "_get_factory", None)
-                factory = factory() if callable(factory) else getattr(_ci, "AzureClientFactory", None)
+                factory = (
+                    factory()
+                    if callable(factory)
+                    else getattr(_ci, "AzureClientFactory", None)
+                )
 
                 factory_mod = getattr(factory, "__module__", "")
-                seam_is_patched = ".tests." in factory_mod or factory_mod.endswith(".tests")
+                seam_is_patched = ".tests." in factory_mod or factory_mod.endswith(
+                    ".tests"
+                )
                 should_try_factory = seam_is_patched
                 logger.debug(
                     "Provider.retrieve – factory seam: factory=%s (patched=%s)",
-                    factory, seam_is_patched
+                    factory,
+                    seam_is_patched,
                 )
 
                 if factory and should_try_factory:
@@ -176,15 +194,24 @@ class AzureSearchProvider:
                             config={"endpoint": ep, "search_key": sk},
                         )
                         try:
-                            logger.debug("Provider.retrieve – factory client.search(%r)", params)
+                            logger.debug(
+                                "Provider.retrieve – factory client.search(%r)", params
+                            )
                             tmp_raw: List[Dict[str, Any]] = []
                             results = await temp_client.search(**params)
                             async for row in results:
                                 tmp_raw.append(dict(row))
-                            logger.debug("Provider.retrieve – factory path yielded %d rows", len(tmp_raw))
+                            logger.debug(
+                                "Provider.retrieve – factory path yielded %d rows",
+                                len(tmp_raw),
+                            )
                             if tmp_raw:
-                                cleaner = getattr(self._pipeline, "_clean_sources", None)
-                                return cleaner(tmp_raw) if callable(cleaner) else tmp_raw
+                                cleaner = getattr(
+                                    self._pipeline, "_clean_sources", None
+                                )
+                                return (
+                                    cleaner(tmp_raw) if callable(cleaner) else tmp_raw
+                                )
                         finally:
                             close = getattr(temp_client, "close", None)
                             if callable(close):
@@ -195,17 +222,24 @@ class AzureSearchProvider:
                     else:
                         logger.debug(
                             "Provider.retrieve – factory path skipped: missing config (endpoint=%r, key=%r, index=%r)",
-                            ep, bool(sk), idx
+                            ep,
+                            bool(sk),
+                            idx,
                         )
             except Exception as exc:
-                logger.debug("Provider.retrieve – factory-created client path failed.", exc_info=exc)
+                logger.debug(
+                    "Provider.retrieve – factory-created client path failed.",
+                    exc_info=exc,
+                )
 
         logger.debug("Provider.retrieve – all fallbacks empty; returning []")
         return rows
 
     # ----------------------------- Helpers --------------------------------------
 
-    def _robust_discover_service_triplet(self) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    def _robust_discover_service_triplet(
+        self,
+    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """
         Best-effort, production-safe discovery of (endpoint, key, index_name).
 
@@ -216,12 +250,19 @@ class AzureSearchProvider:
         We do not trawl arbitrary globals; this remains deterministic for production.
         """
 
-        def _dig_service_from(obj: Any) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        def _dig_service_from(
+            obj: Any,
+        ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
             if obj is None:
                 return (None, None, None)
 
             # Prefer service lists on well-known attributes
-            for attr in ("azure_search_services", "search_services", "azure_search", "services"):
+            for attr in (
+                "azure_search_services",
+                "search_services",
+                "azure_search",
+                "services",
+            ):
                 svcs = getattr(obj, attr, None)
                 if isinstance(svcs, (list, tuple)) and svcs:
                     svc = svcs[0]
@@ -246,8 +287,16 @@ class AzureSearchProvider:
 
             # Or direct fields on the object itself
             ep = getattr(obj, "endpoint", None)
-            sk = getattr(obj, "key", None) or getattr(obj, "search_key", None) or getattr(obj, "api_key", None)
-            idx = getattr(obj, "index_name", None) or getattr(obj, "index", None) or getattr(obj, "indexName", None)
+            sk = (
+                getattr(obj, "key", None)
+                or getattr(obj, "search_key", None)
+                or getattr(obj, "api_key", None)
+            )
+            idx = (
+                getattr(obj, "index_name", None)
+                or getattr(obj, "index", None)
+                or getattr(obj, "indexName", None)
+            )
             return (ep, sk, idx)
 
         # 1) Config on the provider

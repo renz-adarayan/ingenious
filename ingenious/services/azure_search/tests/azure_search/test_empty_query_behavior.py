@@ -46,7 +46,9 @@ class _NoEmbedOpenAI:
 
     class _Embeddings:
         async def create(self, *args: Any, **kwargs: Any) -> NoReturn:
-            raise AssertionError("embeddings.create should not be called for empty query")
+            raise AssertionError(
+                "embeddings.create should not be called for empty query"
+            )
 
     def __init__(self) -> None:
         self.embeddings: _NoEmbedOpenAI._Embeddings = self._Embeddings()

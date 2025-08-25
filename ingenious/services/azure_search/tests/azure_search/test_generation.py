@@ -53,8 +53,9 @@ def generator(config: SearchConfig) -> Generator[AnswerGenerator, None, None]:
     )
     # Patch the instance to inject a mock client and control ownership,
     # ensuring test isolation and predictable behavior.
-    with patch.object(gen, "_llm_client", mock_client), patch.object(
-        gen, "_owns_llm", True
+    with (
+        patch.object(gen, "_llm_client", mock_client),
+        patch.object(gen, "_owns_llm", True),
     ):
         yield gen
 
@@ -112,7 +113,9 @@ async def test_generate_success(
     # Define a realistic, nested mock response from the LLM.
     mock_create_method = AsyncMock(
         return_value=SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content="Answer [Source 1]"))]
+            choices=[
+                SimpleNamespace(message=SimpleNamespace(content="Answer [Source 1]"))
+            ]
         )
     )
     monkeypatch.setattr(client.chat.completions, "create", mock_create_method)
@@ -141,13 +144,18 @@ async def test_generate_empty_short_circuit(generator: AnswerGenerator) -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_exception(generator: AnswerGenerator, config: SearchConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_generate_exception(
+    generator: AnswerGenerator, config: SearchConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Raise on LLM error instead of returning a fallback string."""
+
     async def boom(*_a: Any, **_k: Any) -> Any:
         raise RuntimeError("oops")
 
     # Ensure awaited call is awaitable
-    monkeypatch.setattr(generator._llm_client.chat.completions, "create", boom, raising=True)  # type: ignore[attr-defined]
+    monkeypatch.setattr(
+        generator._llm_client.chat.completions, "create", boom, raising=True
+    )  # type: ignore[attr-defined]
 
     with pytest.raises(RuntimeError):
         await generator.generate("q", [{config.content_field: "x"}])

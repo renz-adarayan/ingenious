@@ -8,13 +8,15 @@ retrieve call consumes the patched factory products.
 
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
-from typing import Any, AsyncIterator
+from typing import Any
 from unittest.mock import patch
+
 import pytest
 
-import logging
 logging.getLogger("ingenious.services.azure_search.provider").setLevel(logging.DEBUG)
+
 
 class _AsyncIter:
     """Minimal async iterator over a single document row."""
@@ -83,7 +85,9 @@ class _Factory:
     """Patched AzureClientFactory exposing async creators used by client_init."""
 
     @staticmethod
-    def create_async_search_client(*, index_name: str, config: dict[str, Any], **_: Any) -> _DummyAsyncSearchClient:
+    def create_async_search_client(
+        *, index_name: str, config: dict[str, Any], **_: Any
+    ) -> _DummyAsyncSearchClient:
         """Return dummy search client; assert config fields are mapped."""
         assert config["endpoint"]
         assert config["search_key"]
@@ -91,30 +95,46 @@ class _Factory:
         return _DummyAsyncSearchClient()
 
     @staticmethod
-    def create_async_openai_client(*, config: dict[str, Any], api_version: str, **_: Any) -> _DummyAsyncOpenAI:
+    def create_async_openai_client(
+        *, config: dict[str, Any], api_version: str, **_: Any
+    ) -> _DummyAsyncOpenAI:
         """Return dummy AOAI client; assert config forwarding."""
         assert config["openai_endpoint"]
         assert config["openai_key"]
         assert api_version
         return _DummyAsyncOpenAI()
 
+
 @pytest.mark.asyncio
 async def test_provider_retrieve_instantiates_clients_via_pipeline_factories() -> None:
     settings = SimpleNamespace(
         models=[
-            SimpleNamespace(role="embedding", deployment="emb", endpoint="https://aoai", api_key="k"),
-            SimpleNamespace(role="chat", deployment="gen", endpoint="https://aoai", api_key="k"),
+            SimpleNamespace(
+                role="embedding", deployment="emb", endpoint="https://aoai", api_key="k"
+            ),
+            SimpleNamespace(
+                role="chat", deployment="gen", endpoint="https://aoai", api_key="k"
+            ),
         ],
         azure_search_services=[
-            SimpleNamespace(endpoint="https://search", key="sk", index_name="idx", use_semantic_ranking=False)
+            SimpleNamespace(
+                endpoint="https://search",
+                key="sk",
+                index_name="idx",
+                use_semantic_ranking=False,
+            )
         ],
     )
 
     # 👇 Patch the correct seam
-    with patch("ingenious.services.azure_search.client_init.AzureClientFactory", _Factory):
+    with patch(
+        "ingenious.services.azure_search.client_init.AzureClientFactory", _Factory
+    ):
         from ingenious.services.azure_search.provider import AzureSearchProvider
 
-        provider = AzureSearchProvider(settings_or_config=settings, enable_answer_generation=False)
+        provider = AzureSearchProvider(
+            settings_or_config=settings, enable_answer_generation=False
+        )
         try:
             rows = await provider.retrieve("q", top_k=1)
             assert rows and rows[0]["id"] == "1"

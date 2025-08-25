@@ -86,7 +86,9 @@ async def test_provider_factory_oneshot_applies_cleaning(
         __module__ = "ingenious.services.azure_search.tests.fake"
 
         @staticmethod
-        def create_async_search_client(*, index_name: str, config: dict[str, Any], **__: Any) -> _OneShotClient:  # noqa: D401
+        def create_async_search_client(
+            *, index_name: str, config: dict[str, Any], **__: Any
+        ) -> _OneShotClient:  # noqa: D401
             return _OneShotClient()
 
     monkeypatch.setattr(ci, "_get_factory", lambda: _Factory, raising=True)

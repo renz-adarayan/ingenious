@@ -12,10 +12,9 @@ We assert:
 from __future__ import annotations
 
 from typing import Any
-from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
-from unittest.mock import patch
 
 from ingenious.config.main_settings import IngeniousSettings
 from ingenious.config.models import AzureSearchSettings, ModelSettings

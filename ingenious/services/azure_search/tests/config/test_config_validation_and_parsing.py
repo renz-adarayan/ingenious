@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 # ModelSettings
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_modelsettings_client_id_and_secret_require_all_fields_or_env(
     monkeypatch: MonkeyPatch,
 ) -> None:

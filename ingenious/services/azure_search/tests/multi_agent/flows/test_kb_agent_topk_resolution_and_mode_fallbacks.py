@@ -7,6 +7,7 @@ priority order: request parameters override environment variables, which in
 turn override hardcoded defaults. It also validates fallback behavior for
 invalid or missing configuration values.
 """
+
 from __future__ import annotations
 
 import os
@@ -90,6 +91,7 @@ def test_non_numeric_and_non_positive_topk_values_are_ignored(
 
     assert flow._get_top_k("direct", ZeroReq()) == 3  # default
 
+
 @pytest.mark.asyncio
 async def test_invalid_kb_mode_coerces_to_direct(
     tmp_path: Path, monkeypatch: MonkeyPatch
@@ -147,6 +149,7 @@ async def test_invalid_kb_mode_coerces_to_direct(
 
     class _Cred:
         """Fake AzureKeyCredential; we only store the key."""
+
         def __init__(self, k: str) -> None:
             self.k = k
 
@@ -156,6 +159,7 @@ async def test_invalid_kb_mode_coerces_to_direct(
           - get_document_count()
           - close()
         """
+
         def __init__(self, *, endpoint: str, index_name: str, credential: Any) -> None:
             # Match the real constructor signature for realism; no logic needed here.
             self.endpoint = endpoint
@@ -177,7 +181,9 @@ async def test_invalid_kb_mode_coerces_to_direct(
     sys.modules["azure.core.credentials"].AzureKeyCredential = _Cred  # type: ignore[attr-defined]
 
     monkeypatch.setitem(
-        sys.modules, "azure.search.documents.aio", _t.ModuleType("azure.search.documents.aio")
+        sys.modules,
+        "azure.search.documents.aio",
+        _t.ModuleType("azure.search.documents.aio"),
     )
     sys.modules["azure.search.documents.aio"].SearchClient = _Client  # type: ignore[attr-defined]
 
@@ -209,7 +215,9 @@ async def test_invalid_kb_mode_coerces_to_direct(
         )
 
     # Patch the symbol where it is used by the flow.
-    monkeypatch.setattr(kb, "make_async_search_client", _make_fake_client_from_cfg, raising=True)
+    monkeypatch.setattr(
+        kb, "make_async_search_client", _make_fake_client_from_cfg, raising=True
+    )
 
     # 5) Make sure the Azure provider import is “available” to the flow so
     #    `_is_azure_search_available()` returns True.
@@ -223,6 +231,7 @@ async def test_invalid_kb_mode_coerces_to_direct(
 
     class CancellationToken:
         """Minimal token class; the flow only needs the symbol to exist."""
+
         ...
 
     core.CancellationToken = CancellationToken
@@ -236,6 +245,7 @@ async def test_invalid_kb_mode_coerces_to_direct(
 
     class DummyLLMClient:
         """Tiny async LLM client with a no-op close() to satisfy flow cleanup."""
+
         async def close(self) -> None:
             pass
 
@@ -243,7 +253,9 @@ async def test_invalid_kb_mode_coerces_to_direct(
     monkeypatch.setattr(
         kb,
         "AzureClientFactory",
-        SimpleNamespace(create_openai_chat_completion_client=lambda _cfg: DummyLLMClient()),
+        SimpleNamespace(
+            create_openai_chat_completion_client=lambda _cfg: DummyLLMClient()
+        ),
         raising=False,
     )
 
@@ -256,7 +268,9 @@ async def test_invalid_kb_mode_coerces_to_direct(
     flow: kb.ConversationFlow = kb.ConversationFlow.__new__(kb.ConversationFlow)
     flow._config = SimpleNamespace(
         models=[SimpleNamespace(model="gpt-4o")],
-        azure_search_services=[SimpleNamespace(endpoint="https://s", key="k", index_name="idx")],
+        azure_search_services=[
+            SimpleNamespace(endpoint="https://s", key="k", index_name="idx")
+        ],
     )
     flow._chat_service = None
     flow._memory_path = str(tmp_path)
@@ -267,6 +281,7 @@ async def test_invalid_kb_mode_coerces_to_direct(
 
     # 9) Execute the code under test with a real ChatRequest.
     from ingenious.models.chat import ChatRequest
+
     resp = await flow.get_conversation_response(ChatRequest(user_prompt="q"))
 
     # 10) Assertions: Azure path used, and 'direct' default top_k=3 was applied.

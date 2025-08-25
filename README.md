@@ -173,7 +173,7 @@ example above), then re-run:
 uv run ingen validate
 ```
 
-> **⚠️ BREAKING CHANGE**  
+> **⚠️ BREAKING CHANGE**
 > Ingenious now uses **pydantic-settings** for configuration via environment
 > variables. Legacy YAML configuration files (`config.yml`, `profiles.yml`) are
 > **no longer supported** and must be migrated to environment variables with
@@ -257,7 +257,7 @@ curl -sS -X POST http://localhost:8000/api/v1/chat -H "Content-Type: application
 
 **Expected Responses**:
 
-- **classification-agent**: JSON with message analysis and categories  
+- **classification-agent**: JSON with message analysis and categories
 - **knowledge-base-agent**: JSON with relevant info retrieved from **Azure AI Search**
   (or a clear message if your index is empty/misconfigured). For local-only mode
   (`KB_POLICY=local_only`), results come from the local store (make sure you’ve
@@ -266,10 +266,10 @@ curl -sS -X POST http://localhost:8000/api/v1/chat -H "Content-Type: application
 
 **Common KB Misconfigurations**:
 
-- `PreflightError: [azure_search] policy: Azure Search is required…`  
+- `PreflightError: [azure_search] policy: Azure Search is required…`
   → Ensure Azure Search is configured as in the environment example above and the
   `INGENIOUS_AZURE_SEARCH_SERVICES__0__...` block is present.
-- 404/401/403 from Azure Search GET calls  
+- 404/401/403 from Azure Search GET calls
   → Check `INDEX_NAME`, `ENDPOINT`, and `KEY`.
 
 ---

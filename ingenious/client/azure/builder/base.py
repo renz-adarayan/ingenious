@@ -23,8 +23,11 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 
 # AzureKeyCredential is lightweight; still guard it to be safe
 try:
-    from azure.core.credentials import AzureKeyCredential  # type: ignore[missing-import]
+    from azure.core.credentials import (
+        AzureKeyCredential,  # type: ignore[missing-import]
+    )
 except Exception:  # pragma: no cover - fallback for environments w/o azure-core
+
     class AzureKeyCredential:  # type: ignore[no-redef]
         def __init__(self, key: str) -> None:
             self.key = key
@@ -33,12 +36,8 @@ except Exception:  # pragma: no cover - fallback for environments w/o azure-core
 # TokenCredential / identity types: type-only to avoid hard dependency at import time
 if TYPE_CHECKING:
     from azure.core.credentials import TokenCredential  # type: ignore[missing-import]
+
     # Identity types are imported only for static typing; runtime imports are lazy.
-    from azure.identity import (  # type: ignore[missing-import]
-        ClientSecretCredential,
-        DefaultAzureCredential,
-        ManagedIdentityCredential,
-    )
 else:
     # Runtime sentinel so attribute access is explicit and predictable
     class _TokenCredentialSentinel:  # pragma: no cover
@@ -94,9 +93,9 @@ class AzureClientBuilder(ABC):
             def _import_identity():
                 try:
                     from azure.identity import (  # type: ignore
+                        ClientSecretCredential,
                         DefaultAzureCredential,
                         ManagedIdentityCredential,
-                        ClientSecretCredential,
                     )
 
                     return (
@@ -230,9 +229,7 @@ class AzureClientBuilder(ABC):
         cred = self.credential
         # Duck-typing check to avoid hard runtime dependency on azure-core types
         if not hasattr(cred, "get_token"):
-            raise ValueError(
-                f"Expected TokenCredential-like object, got {type(cred)}"
-            )
+            raise ValueError(f"Expected TokenCredential-like object, got {type(cred)}")
 
         return cred  # type: ignore[return-value]
 

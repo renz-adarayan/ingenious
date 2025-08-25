@@ -9,20 +9,24 @@ and ensure graceful application shutdown. This suite focuses on the
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
-from ingenious.services.azure_search.provider import AzureSearchProvider
 from ingenious.services.azure_search.config import SearchConfig
+from ingenious.services.azure_search.provider import AzureSearchProvider
+
 
 class _DummyPipeline:
     def __init__(self) -> None:
         self.closed = False
+
     async def close(self) -> None:
         self.closed = True
 
+
 @pytest.mark.asyncio
-async def test_provider_close_calls_all_underlying_clients(config: SearchConfig) -> None:
+async def test_provider_close_calls_all_underlying_clients(
+    config: SearchConfig,
+) -> None:
     p = _DummyPipeline()
     provider = AzureSearchProvider(settings_or_config=config, pipeline=p)
     await provider.close()

@@ -18,7 +18,6 @@ import sys
 import types
 from typing import Any, AsyncIterator, NoReturn, Self
 
-import pytest
 from pytest import MonkeyPatch
 
 # Test constants for configuration
@@ -64,20 +63,17 @@ def _install_async_stubs(monkeypatch: MonkeyPatch) -> dict[str, type]:
     class ClientSecretCredential:  # noqa: N801
         """A stub for azure.identity.aio.ClientSecretCredential."""
 
-        def __init__(self, *_: Any, **__: Any) -> None:
-            ...
+        def __init__(self, *_: Any, **__: Any) -> None: ...
 
     class DefaultAzureCredential:  # noqa: N801
         """A stub for azure.identity.aio.DefaultAzureCredential."""
 
-        def __init__(self, *_: Any, **__: Any) -> None:
-            ...
+        def __init__(self, *_: Any, **__: Any) -> None: ...
 
     class ManagedIdentityCredential:  # noqa: N801
         """A stub for azure.identity.aio.ManagedIdentityCredential."""
 
-        def __init__(self, *_: Any, **__: Any) -> None:
-            ...
+        def __init__(self, *_: Any, **__: Any) -> None: ...
 
     aio.ClientSecretCredential = ClientSecretCredential
     aio.DefaultAzureCredential = DefaultAzureCredential

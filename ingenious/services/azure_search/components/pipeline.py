@@ -61,6 +61,7 @@ class _NullAsyncSearchClient:
 
     async def search(self, *args: Any, **kwargs: Any) -> Any:
         """Return an async-iterable that yields no rows."""
+
         class _Empty:
             def __aiter__(self) -> "_Empty":
                 return self
@@ -408,6 +409,7 @@ class AdvancedSearchPipeline:
 
 
 # ----------------------------- Factory function ------------------------------
+
 
 def build_search_pipeline(config: SearchConfig) -> AdvancedSearchPipeline:
     """

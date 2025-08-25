@@ -85,17 +85,13 @@ async def test_provider_fallback_raw_client_path(
             """Creates a mock client instance for the retriever."""
             return _Client()
 
-        def _clean_sources(
-            self, rows: list[dict[str, Any]]
-        ) -> list[dict[str, Any]]:
+        def _clean_sources(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             """A pass-through mock of the source cleaning method."""
             return rows
 
     from ingenious.services.azure_search import provider as mod
 
-    monkeypatch.setattr(
-        mod, "build_search_pipeline", lambda *_a, **_k: _StubPipeline()
-    )
+    monkeypatch.setattr(mod, "build_search_pipeline", lambda *_a, **_k: _StubPipeline())
 
     from ingenious.services.azure_search.config import SearchConfig
 
@@ -139,9 +135,7 @@ async def test_provider_fallback_factory_one_shot(
             """Mocks the retrieve method to return an empty list."""
             return []
 
-        def _clean_sources(
-            self, rows: list[dict[str, Any]]
-        ) -> list[dict[str, Any]]:
+        def _clean_sources(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             """A pass-through mock of the source cleaning method."""
             return rows
 
@@ -150,9 +144,7 @@ async def test_provider_fallback_factory_one_shot(
 
         async def search(self, *_: Any, **__: Any) -> _AsyncIter:
             """Mocks the search method to return a predefined result."""
-            return _AsyncIter(
-                [{"id": "Z", "@search.score": 2.0, "content": "cz"}]
-            )
+            return _AsyncIter([{"id": "Z", "@search.score": 2.0, "content": "cz"}])
 
         async def close(self) -> None:
             """Mocks the async close method."""
@@ -171,9 +163,7 @@ async def test_provider_fallback_factory_one_shot(
             assert index_name and config.get("endpoint") and config.get("search_key")
             return _OneShotClient()
 
-    monkeypatch.setattr(
-        mod, "build_search_pipeline", lambda *_a, **_k: _StubPipeline()
-    )
+    monkeypatch.setattr(mod, "build_search_pipeline", lambda *_a, **_k: _StubPipeline())
     monkeypatch.setattr(ci, "_get_factory", lambda: _Factory)
 
     from ingenious.services.azure_search.config import SearchConfig

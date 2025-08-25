@@ -30,6 +30,7 @@ import logging
 import os
 import time
 import uuid
+from types import SimpleNamespace
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -38,6 +39,7 @@ from typing import (
     Dict,
     List,
     Optional,
+    Protocol,
     Tuple,
     cast,
 )
@@ -49,20 +51,21 @@ from autogen_core import (  # noqa: F401 (CancellationToken kept for API parity)
     CancellationToken,
 )
 from autogen_core.tools import FunctionTool as _FunctionTool
+from pydantic import SecretStr
+
 from ingenious.client.azure import AzureClientFactory
-from ingenious.services.azure_search.client_init import make_async_search_client
 from ingenious.models.chat import ChatRequest, ChatResponse, ChatResponseChunk
+from ingenious.services.azure_search.client_init import make_async_search_client
 from ingenious.services.chat_services.multi_agent.service import IConversationFlow
 from ingenious.services.retrieval.errors import PreflightError
-from types import SimpleNamespace
-from typing import Protocol
-from pydantic import SecretStr
+
 
 class _SearchConfigLike(Protocol):
     search_index_name: str
     search_endpoint: str
     search_key: SecretStr
-    
+
+
 # Back-compat names so tests can patch: knowledge_base_agent.FunctionTool / AssistantAgent
 FunctionTool = _FunctionTool
 AssistantAgent = _AssistantAgent
@@ -72,7 +75,6 @@ __all__ = ["ConversationFlow", "FunctionTool", "AssistantAgent"]
 if TYPE_CHECKING:
     # Imports for ConversationFlow attributes (assuming Service inheritance)
     # Imports used in methods
-    from autogen_core.utils.client import AsyncClient
 
     from ingenious.config.config import Config
 
@@ -809,7 +811,7 @@ class ConversationFlow(IConversationFlow):
 
         if not service:
             return False
-        endpoint = (getattr(service, "endpoint", "") or "")
+        endpoint = getattr(service, "endpoint", "") or ""
         key_obj = getattr(service, "key", None) or getattr(service, "api_key", None)
         key_val = self._unwrap_secret_or_str(key_obj)
         has_creds = bool(endpoint and key_val and key_val != "mock-search-key-12345")
@@ -991,7 +993,10 @@ class ConversationFlow(IConversationFlow):
         """
         # 1) Preserve precise reason when SDK is missing.
         try:
-            from azure.search.documents.aio import SearchClient as _SDKCheck  # type: ignore[import-untyped]
+            from azure.search.documents.aio import (
+                SearchClient as _SDKCheck,  # type: ignore[import-untyped]
+            )
+
             _ = _SDKCheck  # silence linter
         except ImportError as e:
             raise PreflightError(

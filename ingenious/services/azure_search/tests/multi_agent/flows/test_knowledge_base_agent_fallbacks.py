@@ -115,7 +115,6 @@ async def test_kb_agent_azure_runtime_failure_falls_back_to_chroma(
         ),
         patch("chromadb.PersistentClient", return_value=mock_chroma_client),
         patch.dict(os.environ, {"KB_POLICY": "prefer_azure"}, clear=False),
-
         # --- NEW: patch the KB module’s imported symbol so preflight builds our _Client ---
         patch(
             # IMPORTANT: patch the symbol where it is USED (KB module), not the factory module.

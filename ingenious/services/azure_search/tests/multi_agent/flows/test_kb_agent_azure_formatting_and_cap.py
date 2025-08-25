@@ -25,6 +25,7 @@ import pytest
 
 import ingenious.services.chat_services.multi_agent.conversation_flows.knowledge_base_agent.knowledge_base_agent as kb
 
+
 def install_azure_sdk_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Install a minimal, in-process *fake* Azure SDK and ensure the KB module
@@ -54,7 +55,6 @@ def install_azure_sdk_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     import sys
     import types
-    from typing import Any
 
     # 1) Define a tiny fake credential class that mimics azure.core.credentials.AzureKeyCredential.
     #    We only store the key; we do not perform any real auth.
@@ -140,18 +140,23 @@ def install_azure_sdk_ok(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
     # Patch the symbol *used by the KB module*.
-    monkeypatch.setattr(kb, "make_async_search_client", _build_fake_client_from_cfg, raising=True)
+    monkeypatch.setattr(
+        kb, "make_async_search_client", _build_fake_client_from_cfg, raising=True
+    )
 
     # 5) (Optional) If some earlier test cached a factory singleton, clear it.
     #    This avoids surprising interactions when tests run in a different order.
     #    We swallow errors if that private symbol does not exist.
     try:
         monkeypatch.setattr(
-            "ingenious.services.azure_search.client_init._FACTORY_SINGLETON", None, raising=False
+            "ingenious.services.azure_search.client_init._FACTORY_SINGLETON",
+            None,
+            raising=False,
         )
     except Exception:
         # Not fatal—continue. This is only defensive cleanup for shared state between tests.
         pass
+
 
 def provider_with(
     results: List[Dict[str, str]], monkeypatch: pytest.MonkeyPatch

@@ -22,13 +22,12 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Any
-from types import SimpleNamespace
 import importlib
-
-import pytest
+from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
+import pytest
 
 _KB_MOD_PATH: str = (
     "ingenious.services.chat_services.multi_agent.conversation_flows."
@@ -138,13 +137,16 @@ async def test_prefer_azure_no_fallback_returns_no_info_when_empty(
     )
 
     # Patch provider to return no results and stub the model client.
-    with patch(
-        "ingenious.services.azure_search.provider.AzureSearchProvider",
-        new=_SpyProviderEmpty,
-    ), patch.object(
-        kb_mod.AzureClientFactory,
-        "create_openai_chat_completion_client",
-        return_value=_StubModelClient(),
+    with (
+        patch(
+            "ingenious.services.azure_search.provider.AzureSearchProvider",
+            new=_SpyProviderEmpty,
+        ),
+        patch.object(
+            kb_mod.AzureClientFactory,
+            "create_openai_chat_completion_client",
+            return_value=_StubModelClient(),
+        ),
     ):
         text: str = await flow._search_knowledge_base(  # type: ignore[attr-defined]
             search_query="When is X?",
@@ -153,9 +155,9 @@ async def test_prefer_azure_no_fallback_returns_no_info_when_empty(
             logger=None,
         )
 
-    assert text.startswith(
-        "No relevant information found in Azure AI Search"
-    ), f"Unexpected response: {text!r}"
+    assert text.startswith("No relevant information found in Azure AI Search"), (
+        f"Unexpected response: {text!r}"
+    )
 
 
 @pytest.mark.asyncio
@@ -187,13 +189,16 @@ async def test_coerced_mode_direct_ignores_env_but_honors_request_topk(
 
     # Provider spy + model client stub.
     _SpyProviderCapture.calls = []
-    with patch(
-        "ingenious.services.azure_search.provider.AzureSearchProvider",
-        new=_SpyProviderCapture,
-    ), patch.object(
-        kb_mod.AzureClientFactory,
-        "create_openai_chat_completion_client",
-        return_value=_StubModelClient(),
+    with (
+        patch(
+            "ingenious.services.azure_search.provider.AzureSearchProvider",
+            new=_SpyProviderCapture,
+        ),
+        patch.object(
+            kb_mod.AzureClientFactory,
+            "create_openai_chat_completion_client",
+            return_value=_StubModelClient(),
+        ),
     ):
         from ingenious.models.chat import ChatRequest
 

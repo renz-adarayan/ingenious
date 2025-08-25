@@ -49,6 +49,7 @@ DEFAULT_RAG_PROMPT: str = (
     "{context}"
 )
 
+
 class AnswerGenerator:
     """Synthesize a final answer from top‑N retrieved chunks with an LLM.
 

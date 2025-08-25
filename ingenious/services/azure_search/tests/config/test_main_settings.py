@@ -135,6 +135,7 @@ def test_empty_models_rejected(monkeypatch: MonkeyPatch) -> None:
     with pytest.raises(ValueError, match="At least one model must be configured"):
         IngeniousSettings()
 
+
 def test_model_auth_client_credentials_require_fields(
     monkeypatch: MonkeyPatch,
 ) -> None:

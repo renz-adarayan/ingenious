@@ -97,7 +97,8 @@ def _filter_kwargs_for_ctor(cls: type, kwargs: dict[str, Any]) -> dict[str, Any]
     allowed = {
         p.name
         for p in params
-        if p.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+        if p.kind
+        in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
     }
     return {k: v for k, v in kwargs.items() if k in allowed}
 
@@ -171,5 +172,6 @@ class AsyncAzureOpenAIClientBuilder:
             )
 
         from openai import AsyncAzureOpenAI  # import here to keep builders import-light
+
         kwargs = _filter_kwargs_for_ctor(AsyncAzureOpenAI, kwargs)
         return AsyncAzureOpenAI(**kwargs)

@@ -144,6 +144,7 @@ def make_config(
     ]
     return cfg
 
+
 def install_azure_sdk_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Install a minimal, in-process *fake* Azure SDK and ensure the KB module
@@ -165,7 +166,6 @@ def install_azure_sdk_ok(monkeypatch: pytest.MonkeyPatch) -> None:
 
     import sys
     import types
-    from typing import Any
 
     # -----------------------------
     # 1) Minimal fake SDK classes
@@ -176,6 +176,7 @@ def install_azure_sdk_ok(monkeypatch: pytest.MonkeyPatch) -> None:
         Fake replacement for azure.core.credentials.AzureKeyCredential.
         We only store the key for realism; no real auth happens in tests.
         """
+
         def __init__(self, key: str) -> None:
             self.key = key
 
@@ -184,6 +185,7 @@ def install_azure_sdk_ok(monkeypatch: pytest.MonkeyPatch) -> None:
         Fake replacement for azure.search.documents.aio.SearchClient with the
         two async methods our KB preflight actually calls.
         """
+
         def __init__(self, *, endpoint: str, index_name: str, credential: Any) -> None:
             self.endpoint = endpoint
             self.index_name = index_name
@@ -251,7 +253,9 @@ def install_azure_sdk_ok(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
     # This ensures preflight builds a client with async get_document_count() + close().
-    monkeypatch.setattr(kb, "make_async_search_client", _build_fake_client_from_cfg, raising=True)
+    monkeypatch.setattr(
+        kb, "make_async_search_client", _build_fake_client_from_cfg, raising=True
+    )
 
     # -----------------------------------------------------------------
     # 4) (Optional) Reset any cached factory singleton to avoid stale
@@ -265,6 +269,7 @@ def install_azure_sdk_ok(monkeypatch: pytest.MonkeyPatch) -> None:
         )
     except Exception:
         pass
+
 
 def install_fake_provider(
     monkeypatch: MonkeyPatch, results: list[dict[str, Any]] | None = None

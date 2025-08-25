@@ -14,12 +14,12 @@ isolate provider logic from actual Azure services.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, List, Dict
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
 if TYPE_CHECKING:
-    from pytest import MonkeyPatch
+    pass
 
 
 @pytest.mark.asyncio
@@ -154,10 +154,14 @@ class _DummyPipeline:
 
 
 @pytest.mark.asyncio
-async def test_retrieve_unaffected_when_generation_disabled(import_provider_with_stubs: Any, settings_disabled: Any) -> None:
+async def test_retrieve_unaffected_when_generation_disabled(
+    import_provider_with_stubs: Any, settings_disabled: Any
+) -> None:
     """Ensure provider.retrieve delegates to pipeline.retrieve without touching generation flags."""
     provider_mod = import_provider_with_stubs
     p = _DummyPipeline()
-    prov = provider_mod.AzureSearchProvider(settings_or_config=settings_disabled, pipeline=p)
+    prov = provider_mod.AzureSearchProvider(
+        settings_or_config=settings_disabled, pipeline=p
+    )
     rows = await prov.retrieve("q")
     assert rows and rows[0]["id"] == "1"

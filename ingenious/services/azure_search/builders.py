@@ -1,11 +1,12 @@
 """Builds a validated SearchConfig from application settings.
 
 This module centralizes the complex logic of interpreting user settings for
-Azure Search and Azure OpenAI services. It is responsible for parsing configurations,
-handling various field name aliases (e.g., `key` vs. `api_key`), applying
-sensible defaults, and validating critical inputs like endpoints. Its primary
-goal is to produce a valid `SearchConfig` object that guarantees distinct Azure
-OpenAI deployments for embedding and chat tasks, preventing common runtime errors.
+Azure Search and Azure OpenAI services. It is responsible for parsing
+configurations, handling various field name aliases (e.g., `key` vs. `api_key`),
+applying sensible defaults, and validating critical inputs like endpoints. Its
+primary goal is to produce a valid `SearchConfig` object that guarantees distinct
+Azure OpenAI deployments for embedding and chat tasks, preventing common runtime
+errors.
 
 The main entry point is `build_search_config_from_settings`.
 """
@@ -15,7 +16,7 @@ from __future__ import annotations
 import logging
 import urllib.parse
 from types import SimpleNamespace
-from typing import Any, Optional, Protocol, Tuple, cast, runtime_checkable
+from typing import Any, Optional, Protocol, cast, runtime_checkable
 
 from pydantic import SecretStr
 
@@ -184,8 +185,9 @@ def _extract_secret_value(value: Optional[str | SecretStr]) -> Optional[str]:
 def _model_endpoint(model: ModelConfig) -> Optional[str]:
     """Get the model endpoint, trying both `endpoint` and `base_url` attributes.
 
-    This exists to provide user flexibility, as different libraries and conventions
-    use different attribute names for the same concept (an API base URL).
+    This exists to provide user flexibility, as different libraries and
+    conventions use different attribute names for the same concept (an API base
+    URL).
     """
     return _first_non_empty(
         getattr(model, "endpoint", None), getattr(model, "base_url", None)
@@ -195,8 +197,8 @@ def _model_endpoint(model: ModelConfig) -> Optional[str]:
 def _model_key(model: ModelConfig) -> Optional[str]:
     """Get the model API key, trying `key` and `api_key` and handling SecretStr.
 
-    This function allows users to specify an API key using common aliases
-    and ensures that if a Pydantic `SecretStr` is provided (e.g., from settings),
+    This function allows users to specify an API key using common aliases and
+    ensures that if a Pydantic `SecretStr` is provided (e.g., from settings),
     its underlying string value is correctly extracted.
     """
     key: Optional[str | SecretStr] = _get(model, "key", "api_key")
@@ -234,7 +236,7 @@ def _is_chat_model(model: ModelConfig) -> bool:
 # -------------------- Model selection --------------------
 
 
-def _select_models(models: list[ModelConfig]) -> Tuple[ModelConfig, ModelConfig]:
+def _select_models(models: list[ModelConfig]) -> tuple[ModelConfig, ModelConfig]:
     """Select and return the embedding and chat models from a list.
 
     This function implements the core logic for identifying the two required
@@ -271,36 +273,33 @@ def _select_models(models: list[ModelConfig]) -> Tuple[ModelConfig, ModelConfig]
         if chat_cfg:
             return chat_cfg, chat_cfg
         raise ConfigError(
-            "Unable to identify model type. Please specify 'role' attribute "
-            "or use recognizable model names containing 'embedding' or 'gpt'."
+            "Unable to identify model type. Please specify 'role' attribute or "
+            "use recognizable model names containing 'embedding' or 'gpt'."
         )
 
     # Multiple models but missing one role
     if not emb_cfg:
         raise ConfigError(
-            "No embedding model configured (expected role 'embedding' or model containing 'embedding')."
+            "No embedding model configured (expected role 'embedding' or model "
+            "containing 'embedding')."
         )
     if not chat_cfg:
         raise ConfigError(
-            "No chat/generation model configured (expected role 'chat' or model containing 'gpt'/'4o')."
+            "No chat/generation model configured (expected role 'chat' or model "
+            "containing 'gpt'/'4o')."
         )
 
-    # This case should be unreachable given the logic above, but serves as a safeguard.
-    raise ConfigError(
-        "Unable to select models: none look like embedding ('embedding') or chat ('gpt'/'4o')."
-    )
 
-
-def _pick_models(settings: IngeniousSettings) -> Tuple[str, str, str, str, str]:
+def _pick_models(settings: IngeniousSettings) -> tuple[str, str, str, str, str]:
     """Extract and validate all required model configurations from settings.
 
     This function orchestrates the process of selecting the correct models,
-    extracting their essential properties (endpoint, key, deployments),
-    and validating that all required values are present and correctly formatted.
+    extracting their essential properties (endpoint, key, deployments), and
+    validating that all required values are present and correctly formatted.
 
     Returns:
         A tuple of (openai_endpoint, openai_key, openai_version,
-                 embedding_deployment, generation_deployment).
+        embedding_deployment, generation_deployment).
 
     Raises:
         ConfigError: If any part of the model configuration is invalid or
@@ -410,7 +409,8 @@ def _ensure_openai_property_on_config_class() -> None:
     This function dynamically patches the `SearchConfig` class to add an
     `openai` property. This is done to maintain backward compatibility with
     older code that expects to access OpenAI settings via a nested `cfg.openai`
-    object, preventing breaking changes for consumers of the configuration object.
+    object, preventing breaking changes for consumers of the configuration
+    object.
     """
     if hasattr(SearchConfig, "openai"):
         return
@@ -439,11 +439,11 @@ def _ensure_openai_property_on_config_class() -> None:
         )
 
     try:
-        # Add property to the class. Mypy disallows this on imported classes.
-        SearchConfig.openai = property(_openai_property)  # type: ignore[attr-defined]
+        # Use setattr with a cast to Any to avoid mypy's method-assign errors.
+        setattr(cast(Any, SearchConfig), "openai", property(_openai_property))
     except (AttributeError, TypeError):
         # If SearchConfig is immutable or doesn't allow attribute injection,
-        # log a warning but continue
+        # log a warning but continue.
         log.warning(
             "Unable to add 'openai' property to SearchConfig for backward compatibility"
         )
@@ -456,9 +456,10 @@ def build_search_config_from_settings(settings: IngeniousSettings) -> SearchConf
     """Build a complete and validated SearchConfig from application settings.
 
     This is the main public entry point for creating a `SearchConfig` instance.
-    It orchestrates all validation, alias handling, and default application logic.
-    A critical function is enforcing that the embedding and chat models use
-    different Azure OpenAI deployments, which is a common and required setup.
+    It orchestrates all validation, alias handling, and default application
+    logic. A critical function is enforcing that the embedding and chat models
+    use different Azure OpenAI deployments, which is a common and required
+    setup.
 
     Args:
         settings: The application settings object containing Azure Search and
@@ -491,8 +492,8 @@ def build_search_config_from_settings(settings: IngeniousSettings) -> SearchConf
     # Enforce distinct deployments for embedding and chat
     if emb_dep == gen_dep:
         raise ConfigError(
-            "Embedding and chat deployments must not be the same. "
-            "Configure distinct Azure OpenAI deployments for embeddings and chat."
+            "Embedding and chat deployments must not be the same. Configure "
+            "distinct Azure OpenAI deployments for embeddings and chat."
         )
 
     # Ensure backward compatibility for consumers expecting cfg.openai

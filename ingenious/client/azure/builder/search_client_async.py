@@ -11,6 +11,7 @@ try:
     # Precise async token protocol for typing
     from azure.core.credentials_async import AsyncTokenCredential
 except Exception:  # pragma: no cover - typing fallback if azure-core version differs
+
     class AsyncTokenCredential:  # type: ignore[no-redef]
         async def get_token(self, *scopes: str) -> Any:  # pragma: no cover - typing aid
             ...
@@ -64,7 +65,8 @@ def _filter_kwargs_for_ctor(cls: type, kwargs: dict[str, Any]) -> dict[str, Any]
     allowed = {
         p.name
         for p in params
-        if p.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+        if p.kind
+        in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
     }
     # 'self' will never be in kwargs; no need to remove it explicitly
     return {k: v for k, v in kwargs.items() if k in allowed}
@@ -142,11 +144,15 @@ class AzureSearchAsyncClientBuilder:
         cred: Union[AsyncTokenCredential, AzureKeyCredential, None] = None
         if tenant_id and client_id and client_secret:
             from azure.identity.aio import ClientSecretCredential  # type: ignore
+
             cred = ClientSecretCredential(
-                tenant_id=str(tenant_id), client_id=str(client_id), client_secret=str(client_secret)
+                tenant_id=str(tenant_id),
+                client_id=str(client_id),
+                client_secret=str(client_secret),
             )
         elif msi_client_id:
             from azure.identity.aio import ManagedIdentityCredential  # type: ignore
+
             cred = ManagedIdentityCredential(client_id=str(msi_client_id))
         elif prefer_token_flag or not key:
             try:
@@ -157,13 +163,16 @@ class AzureSearchAsyncClientBuilder:
                         "azure-identity is required for token auth or provide 'search_key'."
                     ) from e
             else:
-                cred = DefaultAzureCredential(exclude_interactive_browser_credential=True)
+                cred = DefaultAzureCredential(
+                    exclude_interactive_browser_credential=True
+                )
 
         if cred is None and key:
             cred = AzureKeyCredential(str(key))
 
         if cred is None:
             from azure.identity.aio import DefaultAzureCredential  # type: ignore
+
             cred = DefaultAzureCredential(exclude_interactive_browser_credential=True)
 
         return cls(

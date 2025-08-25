@@ -21,13 +21,12 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator
-from types import SimpleNamespace
 import importlib
-
-import pytest
+from types import SimpleNamespace
+from typing import Any, AsyncIterator
 from unittest.mock import AsyncMock, patch
 
+import pytest
 
 _KB_MOD_PATH: str = (
     "ingenious.services.chat_services.multi_agent.conversation_flows."
@@ -140,7 +139,9 @@ class _StubAssistantAgent:
         yield SimpleNamespace(content=res)
 
         # 5) Token usage so the agent emits a token_count chunk.
-        yield SimpleNamespace(usage=SimpleNamespace(total_tokens=123, completion_tokens=45))
+        yield SimpleNamespace(
+            usage=SimpleNamespace(total_tokens=123, completion_tokens=45)
+        )
 
         # 6) Final task result → the agent attempts a final flush.
         class _TaskResult:
@@ -202,14 +203,18 @@ async def test_streaming_assist_calls_provider_and_honors_request_topk(
     )
 
     # Patch provider, model client, and agent/tool wrappers at the KB module site.
-    with patch(
-        "ingenious.services.azure_search.provider.AzureSearchProvider", new=_SpyProvider
-    ), patch.object(
-        kb_mod.AzureClientFactory, "create_openai_chat_completion_client", return_value=_StubModelClient()
-    ), patch.object(
-        kb_mod, "AssistantAgent", new=_StubAssistantAgent
-    ), patch.object(
-        kb_mod, "FunctionTool", new=_StubFunctionTool
+    with (
+        patch(
+            "ingenious.services.azure_search.provider.AzureSearchProvider",
+            new=_SpyProvider,
+        ),
+        patch.object(
+            kb_mod.AzureClientFactory,
+            "create_openai_chat_completion_client",
+            return_value=_StubModelClient(),
+        ),
+        patch.object(kb_mod, "AssistantAgent", new=_StubAssistantAgent),
+        patch.object(kb_mod, "FunctionTool", new=_StubFunctionTool),
     ):
         from ingenious.models.chat import ChatRequest
 
@@ -260,14 +265,18 @@ async def test_streaming_filters_tool_chatter_and_surfaces_final_content(
         AsyncMock(return_value=None),
     )
 
-    with patch(
-        "ingenious.services.azure_search.provider.AzureSearchProvider", new=_SpyProvider
-    ), patch.object(
-        kb_mod.AzureClientFactory, "create_openai_chat_completion_client", return_value=_StubModelClient()
-    ), patch.object(
-        kb_mod, "AssistantAgent", new=_StubAssistantAgent
-    ), patch.object(
-        kb_mod, "FunctionTool", new=_StubFunctionTool
+    with (
+        patch(
+            "ingenious.services.azure_search.provider.AzureSearchProvider",
+            new=_SpyProvider,
+        ),
+        patch.object(
+            kb_mod.AzureClientFactory,
+            "create_openai_chat_completion_client",
+            return_value=_StubModelClient(),
+        ),
+        patch.object(kb_mod, "AssistantAgent", new=_StubAssistantAgent),
+        patch.object(kb_mod, "FunctionTool", new=_StubFunctionTool),
     ):
         from ingenious.models.chat import ChatRequest
 
@@ -281,7 +290,9 @@ async def test_streaming_filters_tool_chatter_and_surfaces_final_content(
 
     # Join surfaced content.
     surfaced_texts: list[str] = [
-        getattr(c, "content", "") for c in chunks if getattr(c, "chunk_type", "") == "content"
+        getattr(c, "content", "")
+        for c in chunks
+        if getattr(c, "chunk_type", "") == "content"
     ]
     joined: str = " ".join(surfaced_texts)
 

@@ -31,7 +31,9 @@ class AzureOpenAIChatCompletionClientBuilder(AzureClientBuilder):
         super().__init__(auth_config=auth_config)
         self.model_config = model_config
 
-    def _create_auth_config_from_model_config(self, model_config: Union[ModelConfig, ModelSettings]) -> AzureAuthConfig:
+    def _create_auth_config_from_model_config(
+        self, model_config: Union[ModelConfig, ModelSettings]
+    ) -> AzureAuthConfig:
         """Create AzureAuthConfig from model configuration."""
         return AzureAuthConfig.from_config(model_config)
 
@@ -47,7 +49,8 @@ class AzureOpenAIChatCompletionClientBuilder(AzureClientBuilder):
             # Use API key authentication - need raw string value
             return AzureOpenAIChatCompletionClient(
                 model=self.model_config.model or self.model_config.deployment,
-                azure_deployment=self.model_config.deployment or self.model_config.model,
+                azure_deployment=self.model_config.deployment
+                or self.model_config.model,
                 api_version=self.model_config.api_version,
                 azure_endpoint=self.model_config.base_url,
                 api_key=self.api_key,

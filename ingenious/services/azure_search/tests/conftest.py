@@ -29,6 +29,7 @@ from pydantic import SecretStr
 # Public model under test
 from ingenious.services.azure_search.config import DEFAULT_DAT_PROMPT, SearchConfig
 
+
 @pytest.fixture(autouse=True)
 def _conditionally_clear_semantic_env(
     request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
@@ -38,7 +39,9 @@ def _conditionally_clear_semantic_env(
     if "test_cli_missing_semantic_name_exits_1" in name or "missing_semantic" in name:
         monkeypatch.delenv("AZURE_SEARCH_SEMANTIC_CONFIG", raising=False)
 
+
 # ----- Lightweight stubs to satisfy imports (no real Azure/OpenAI needed) -----
+
 
 @pytest.fixture(autouse=True)
 def stub_sdks():
@@ -117,7 +120,15 @@ def stub_sdks():
     mod_openai = types.ModuleType("openai")
 
     class FakeAsyncAzureOpenAI:
-        def __init__(self, *, azure_endpoint, api_version, api_key=None, azure_ad_token_provider=None, **kwargs):
+        def __init__(
+            self,
+            *,
+            azure_endpoint,
+            api_version,
+            api_key=None,
+            azure_ad_token_provider=None,
+            **kwargs,
+        ):
             self.azure_endpoint = azure_endpoint
             self.api_version = api_version
             self.api_key = api_key
@@ -160,9 +171,11 @@ def stub_sdks():
     mod_blob_blob = types.ModuleType("azure.storage.blob")
 
     class BlobClient: ...
+
     class BlobServiceClient:
         @staticmethod
-        def from_connection_string(cs): return BlobServiceClient()
+        def from_connection_string(cs):
+            return BlobServiceClient()
 
     mod_blob_blob.BlobClient = BlobClient
     mod_blob_blob.BlobServiceClient = BlobServiceClient
@@ -170,6 +183,7 @@ def stub_sdks():
     sys.modules["azure.storage.blob"] = mod_blob_blob
 
     yield
+
 
 class _DummyAsyncAzureOpenAI:
     """A minimal, offline stub for `openai.AsyncAzureOpenAI`."""
@@ -1180,7 +1194,9 @@ def patch_external_sdks(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None
             pass
         try:
             monkeypatch.setattr(
-                f"{mod}.make_async_search_client", lambda cfg: search_client, raising=False
+                f"{mod}.make_async_search_client",
+                lambda cfg: search_client,
+                raising=False,
             )
         except Exception:
             pass

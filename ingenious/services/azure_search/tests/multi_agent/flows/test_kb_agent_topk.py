@@ -354,7 +354,6 @@ def azure_sdk_compat(monkeypatch: pytest.MonkeyPatch) -> None:
 
     import sys
     import types
-    from typing import Any
 
     # -----------------------------
     # 1) Define minimal fake SDK
@@ -365,6 +364,7 @@ def azure_sdk_compat(monkeypatch: pytest.MonkeyPatch) -> None:
         Fake stand-in for azure.core.credentials.AzureKeyCredential.
         It simply stores the key; no real auth is performed.
         """
+
         def __init__(self, key: str) -> None:
             self.key = key
 
@@ -375,6 +375,7 @@ def azure_sdk_compat(monkeypatch: pytest.MonkeyPatch) -> None:
           - get_document_count (async)
           - close (async)
         """
+
         def __init__(self, *, endpoint: str, index_name: str, credential: Any) -> None:
             self.endpoint = endpoint
             self.index_name = index_name
@@ -449,7 +450,9 @@ def azure_sdk_compat(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
     # Patch the KB module's symbol so preflight always gets our fake with the right surface.
-    monkeypatch.setattr(kb, "make_async_search_client", _build_fake_client_from_cfg, raising=True)
+    monkeypatch.setattr(
+        kb, "make_async_search_client", _build_fake_client_from_cfg, raising=True
+    )
 
     # -----------------------------------------------------------------
     # 4) (Optional) Reset any cached factory singleton to avoid stale
@@ -464,6 +467,7 @@ def azure_sdk_compat(monkeypatch: pytest.MonkeyPatch) -> None:
         )
     except Exception:
         pass
+
 
 def make_config(
     memory_path: str,

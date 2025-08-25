@@ -33,6 +33,7 @@ from ingenious.models.config import (
 # Optional dependency flags (evaluated once at import)
 # --------------------------------------------------------------------------------------
 
+
 def _has_module(modname: str) -> bool:
     try:
         return importlib.util.find_spec(modname) is not None
@@ -47,15 +48,15 @@ HAS_COSMOS: bool = _has_module("azure.cosmos")
 # Patchable builder symbols (initialized to None; tests can patch these directly).
 # --------------------------------------------------------------------------------------
 
-AzureOpenAIClientBuilder = None                 # type: ignore[assignment]
-AzureOpenAIChatCompletionClientBuilder = None   # type: ignore[assignment]
-BlobServiceClientBuilder = None                 # type: ignore[assignment]
-BlobClientBuilder = None                        # type: ignore[assignment]
-AzureSearchClientBuilder = None                 # type: ignore[assignment]
-AzureSqlClientBuilder = None                    # type: ignore[assignment]
-AzureSqlClientBuilderWithAuth = None            # type: ignore[assignment]
-AzureSearchAsyncClientBuilder = None            # type: ignore[assignment]
-AsyncAzureOpenAIClientBuilder = None            # type: ignore[assignment]
+AzureOpenAIClientBuilder = None  # type: ignore[assignment]
+AzureOpenAIChatCompletionClientBuilder = None  # type: ignore[assignment]
+BlobServiceClientBuilder = None  # type: ignore[assignment]
+BlobClientBuilder = None  # type: ignore[assignment]
+AzureSearchClientBuilder = None  # type: ignore[assignment]
+AzureSqlClientBuilder = None  # type: ignore[assignment]
+AzureSqlClientBuilderWithAuth = None  # type: ignore[assignment]
+AzureSearchAsyncClientBuilder = None  # type: ignore[assignment]
+AsyncAzureOpenAIClientBuilder = None  # type: ignore[assignment]
 
 __all__ = [
     "AzureClientFactory",
@@ -78,6 +79,7 @@ _PKG_BASE = __package__  # e.g., "ingenious.client.azure"
 # --------------------------------------------------------------------------------------
 # Internal helpers
 # --------------------------------------------------------------------------------------
+
 
 def _ensure_builder(
     global_name: str,
@@ -102,6 +104,7 @@ def _ensure_builder(
 # --------------------------------------------------------------------------------------
 # Factory
 # --------------------------------------------------------------------------------------
+
 
 class AzureClientFactory:
     """Factory class for creating Azure service clients with proper authentication."""
@@ -447,7 +450,9 @@ class AzureClientFactory:
     @staticmethod
     def create_async_search_client(
         index_name: str,
-        config: Optional[Mapping[str, Any] | AzureSearchConfig | AzureSearchSettings] = None,
+        config: Optional[
+            Mapping[str, Any] | AzureSearchConfig | AzureSearchSettings
+        ] = None,
         **client_options: Any,
     ) -> Any:
         builder_cls = _ensure_builder(

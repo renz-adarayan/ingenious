@@ -1,5 +1,4 @@
-from typing import List, Optional, Any
-from pydantic_core import core_schema
+from typing import List, Optional
 
 from pydantic import BaseModel, Field, RootModel
 
@@ -15,20 +14,20 @@ class ModelConfig(AzureAuthConfig, BaseModel):
     deployment: str = ""
 
 
-class ChatHistoryConfig(AzureAuthConfig, BaseModel): 
+class ChatHistoryConfig(AzureAuthConfig, BaseModel):
     database_connection_string: str = ""
 
 
-class AzureSqlConfig(AzureAuthConfig, BaseModel): 
+class AzureSqlConfig(AzureAuthConfig, BaseModel):
     database_connection_string: str = ""
 
 
-class CosmosConfig(AzureAuthConfig, BaseModel): 
+class CosmosConfig(AzureAuthConfig, BaseModel):
     uri: str = Field(..., description="Azure Cosmos DB URI")
     database_name: str = Field(..., description="Azure Cosmos DB database name")
 
 
-class AzureSearchConfig(AzureAuthConfig, BaseModel): 
+class AzureSearchConfig(AzureAuthConfig, BaseModel):
     service: str = "default"
     key: str = ""
 

@@ -86,7 +86,9 @@ class OpenAIService:
         )
         try:
             effective_tool_choice: Any = (
-                tool_choice if tool_choice is not None else ("auto" if tools else NOT_GIVEN)
+                tool_choice
+                if tool_choice is not None
+                else ("auto" if tools else NOT_GIVEN)
             )
 
             response = self.client.chat.completions.create(
@@ -121,8 +123,13 @@ class OpenAIService:
                 message = error.body.get("message", message)
 
                 # Content filter path
-                if getattr(error, "code", None) == "content_filter" and "innererror" in error.body:
-                    content_filter_results = error.body["innererror"].get("content_filter_result", {})
+                if (
+                    getattr(error, "code", None) == "content_filter"
+                    and "innererror" in error.body
+                ):
+                    content_filter_results = error.body["innererror"].get(
+                        "content_filter_result", {}
+                    )
                     raise ContentFilterError(message, content_filter_results)
 
                 # Token limit (AOAI-style) pattern
@@ -175,7 +182,9 @@ class OpenAIService:
         )
         try:
             effective_tool_choice: Any = (
-                tool_choice if tool_choice is not None else ("auto" if tools else NOT_GIVEN)
+                tool_choice
+                if tool_choice is not None
+                else ("auto" if tools else NOT_GIVEN)
             )
 
             stream = self.client.chat.completions.create(
@@ -221,8 +230,13 @@ class OpenAIService:
             if isinstance(error.body, dict):
                 message = error.body.get("message", message)
 
-                if getattr(error, "code", None) == "content_filter" and "innererror" in error.body:
-                    content_filter_results = error.body["innererror"].get("content_filter_result", {})
+                if (
+                    getattr(error, "code", None) == "content_filter"
+                    and "innererror" in error.body
+                ):
+                    content_filter_results = error.body["innererror"].get(
+                        "content_filter_result", {}
+                    )
                     raise ContentFilterError(message, content_filter_results)
 
                 token_error_pattern = (

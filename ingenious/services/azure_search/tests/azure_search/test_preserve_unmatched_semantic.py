@@ -43,7 +43,9 @@ async def test_apply_semantic_ranking_preserves_unmatched_top50(
         {"id": "B", "content": "beta", "_fused_score": 0.55},
     ]
 
-    out: list[dict[str, Any]] = await pipeline._apply_semantic_ranking("any query", fused)
+    out: list[dict[str, Any]] = await pipeline._apply_semantic_ranking(
+        "any query", fused
+    )
     ids: set[Any] = {d.get("id") for d in out}
     assert {"A,1", "B"} <= ids
 
@@ -81,7 +83,9 @@ async def test_pipeline_semantic_rerank_preserves_unmatched(
         {"id": "B", "_fused_score": 0.55, "content": "beta"},
     ]
 
-    out: list[dict[str, Any]] = await pipeline._apply_semantic_ranking("any query", fused)
+    out: list[dict[str, Any]] = await pipeline._apply_semantic_ranking(
+        "any query", fused
+    )
     ids: set[Any] = {d.get("id") for d in out}
     assert "A,1" in ids
 

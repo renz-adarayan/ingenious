@@ -20,8 +20,8 @@ from ingenious.errors.content_filter_error import ContentFilterError
 from ingenious.errors.token_limit_exceeded_error import TokenLimitExceededError
 from ingenious.external_services.openai_service import OpenAIService
 
-
 # --------------------------- helpers ---------------------------
+
 
 def _make_client(
     *, return_value: Any | None = None, side_effect: Exception | None = None

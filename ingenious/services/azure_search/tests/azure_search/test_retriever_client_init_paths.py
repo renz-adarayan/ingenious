@@ -11,7 +11,7 @@ interfaces, allowing for isolated and fast execution.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, AsyncIterator, List, Tuple
+from typing import Any, AsyncIterator, Tuple
 from unittest.mock import patch
 
 import pytest
@@ -189,10 +189,15 @@ async def test_provider_retrieve_uses_client_factories() -> None:
         return _DummyAsyncOpenAI()
 
     # Patch client_init factories (used by the provider's pipeline builder)
-    with patch(
-        "ingenious.services.azure_search.client_init.make_async_search_client", new=_mk_sc
-    ), patch(
-        "ingenious.services.azure_search.client_init.make_async_openai_client", new=_mk_aoai
+    with (
+        patch(
+            "ingenious.services.azure_search.client_init.make_async_search_client",
+            new=_mk_sc,
+        ),
+        patch(
+            "ingenious.services.azure_search.client_init.make_async_openai_client",
+            new=_mk_aoai,
+        ),
     ):
         provider = AzureSearchProvider(_settings(), enable_answer_generation=False)
 

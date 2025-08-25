@@ -1,16 +1,21 @@
 """Tests the AdvancedSearchPipeline and its construction factory.
 
-This module contains unit and integration tests for the core RAG pipeline
-logic defined in `ingenious.services.azure_search.components.pipeline`.
-It verifies the behavior of the `AdvancedSearchPipeline` class and the
+This module contains unit and integration tests for the core RAG pipeline logic
+defined in `ingenious.services.azure_search.components.pipeline`. It verifies
+the behavior of the `AdvancedSearchPipeline` class and the
 `build_search_pipeline` factory function, ensuring correct data flow,
 component lifecycle (construction, closing), and error handling under
 controlled conditions using stub implementations.
+
+Usage:
+- Run with pytest; async tests are marked with `@pytest.mark.asyncio`.
+- Stubs/spies avoid network calls and make behavior deterministic.
+- Entry points: build_* tests and get_answer* tests below.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import pytest
@@ -21,6 +26,17 @@ from ingenious.services.azure_search.components.pipeline import (
     build_search_pipeline,
 )
 from ingenious.services.retrieval.errors import GenerationDisabledError
+
+if TYPE_CHECKING:
+    # Type-only import to satisfy Ruff/mypy without importing at runtime.
+    # Adjust the path below if SearchConfig resides elsewhere.
+    from ingenious.services.azure_search.config import SearchConfig
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Constants
+# ──────────────────────────────────────────────────────────────────────────────
+
+EXPECTED_EMPTY_QUERY_MSG = "Please enter a question so I can search the knowledge base."
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Test stubs
@@ -368,8 +384,7 @@ async def test_get_answer_empty_query_short_circuits_without_io(
         result = await pipe.get_answer(empty_query)
 
         # 1. Assert the expected short-circuit response
-        expected_answer = "Please enter a question so I can search the knowledge base."
-        assert result["answer"] == expected_answer
+        assert result["answer"] == EXPECTED_EMPTY_QUERY_MSG
         assert result["source_chunks"] == []
 
         # 2. Assert that no downstream components were ever called
@@ -378,9 +393,13 @@ async def test_get_answer_empty_query_short_circuits_without_io(
         fuse_spy.assert_not_called()
         gen_spy.assert_not_called()
 
+
 @pytest.mark.asyncio
-async def test_get_answer_generation_error_bubbles_as_runtime_error(config_no_semantic: SearchConfig) -> None:
+async def test_get_answer_generation_error_bubbles_as_runtime_error(
+    config_no_semantic: "SearchConfig",
+) -> None:
     """Check that a generator failure propagates from `get_answer`."""
+
     class StubRetriever:
         """Retriever stub returning a single chunk."""
 
@@ -418,16 +437,20 @@ async def test_get_answer_generation_error_bubbles_as_runtime_error(config_no_se
             """No-op."""
             return None
 
+    # ✅ Enable generation for this test case
+    cfg = config_no_semantic.copy(update={"enable_answer_generation": True})
+
     p = AdvancedSearchPipeline(
-        config=config_no_semantic,
+        config=cfg,
         retriever=StubRetriever(),  # type: ignore[arg-type]
-        fuser=StubFuser(),          # type: ignore[arg-type]
+        fuser=StubFuser(),  # type: ignore[arg-type]
         answer_generator=BoomAnswerGen(),
         rerank_client=None,
     )
 
-    with pytest.raises(Exception):
+    with pytest.raises(RuntimeError):
         await p.get_answer("q")
+
 
 @pytest.mark.asyncio
 async def test_pipeline_close_safely_handles_none_generator(

@@ -13,7 +13,6 @@ focuses solely on the intended logic path.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -23,7 +22,7 @@ import pytest
 from ingenious.models.chat import ChatRequest
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    pass
 
 # --- Constants for magic values ---
 KB_POLICY_ENV_VAR = "KB_POLICY"
@@ -42,9 +41,7 @@ DUMMY_API_VERSION = "2024-02-01"
 class _DummyChatHistoryRepo:
     """A stub repository for chat history, returning no messages."""
 
-    async def get_thread_messages(
-        self, thread_id: str
-    ) -> list[SimpleNamespace]:
+    async def get_thread_messages(self, thread_id: str) -> list[SimpleNamespace]:
         """Simulate fetching chat messages, always returning an empty list.
 
         This is the minimal implementation required by the ConversationFlow's
