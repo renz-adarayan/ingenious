@@ -19,8 +19,8 @@ class TestLazyGroup:
         group = LazyGroup()
         assert isinstance(group, TyperGroup)
         assert hasattr(group, "_loaders")
-        assert "document-processing" in group._loaders
-        assert "dataprep" in group._loaders
+        # Document processing commands have been moved to ingenious-aux
+        assert isinstance(group._loaders, dict)
 
     def test_list_commands_basic(self):
         """Test list_commands returns sorted command names"""
@@ -31,11 +31,9 @@ class TestLazyGroup:
         with patch.object(TyperGroup, "list_commands", return_value=["cmd1", "cmd2"]):
             commands = group.list_commands(ctx)
 
-            # Should include both parent commands and lazy-loaded commands
+            # Should include parent commands (document processing moved to ingenious-aux)
             assert "cmd1" in commands
             assert "cmd2" in commands
-            assert "document-processing" in commands
-            assert "dataprep" in commands
             # Should be sorted
             assert commands == sorted(commands)
 
@@ -44,16 +42,17 @@ class TestLazyGroup:
         group = LazyGroup()
         ctx = Mock(spec=Context)
 
-        # Mock parent to return a command that's also in loaders
+        # Mock parent to return commands
         with patch.object(
-            TyperGroup, "list_commands", return_value=["dataprep", "other-cmd"]
+            TyperGroup, "list_commands", return_value=["other-cmd", "test-cmd"]
         ):
             commands = group.list_commands(ctx)
 
             # Should not have duplicates
-            assert commands.count("dataprep") == 1
             assert "other-cmd" in commands
-            assert "document-processing" in commands
+            assert "test-cmd" in commands
+            # Document processing commands moved to ingenious-aux
+            assert len(commands) == len(set(commands))  # No duplicates
 
     def test_get_command_main_command_exists(self):
         """Test get_command returns main command when it exists"""
@@ -74,91 +73,28 @@ class TestLazyGroup:
             result = group.get_command(ctx, "unknown-command")
             assert result is None
 
-    @patch("ingenious.utils.lazy_group.importlib.import_module")
-    @patch("ingenious.utils.lazy_group.typer.main.get_command")
-    def test_get_command_lazy_load_success(self, mock_get_command, mock_import):
-        """Test successful lazy loading of a command"""
-        group = LazyGroup()
-        ctx = Mock(spec=Context)
+    @pytest.mark.skip(reason="Document processing commands moved to ingenious-aux")
+    def test_get_command_lazy_load_success(self):
+        """Test successful lazy loading of a command - no longer applicable"""
+        pass
 
-        # Mock the module and attribute
-        mock_module = Mock()
-        mock_sub_app = Mock()
-        mock_module.doc_app = mock_sub_app
-        mock_import.return_value = mock_module
+    @pytest.mark.skip(reason="Document processing commands moved to ingenious-aux")
+    def test_get_command_lazy_load_already_click_command(self):
+        """Test lazy loading when sub_app is already a Click command - no longer applicable"""
+        pass
 
-        # Mock typer.main.get_command
-        mock_click_command = Mock(spec=Command)
-        mock_get_command.return_value = mock_click_command
-
-        with patch.object(TyperGroup, "get_command", return_value=None):
-            result = group.get_command(ctx, "document-processing")
-
-            assert result is mock_click_command
-            mock_import.assert_called_once_with("ingenious.document_processing.cli")
-            mock_get_command.assert_called_once_with(mock_sub_app)
-
-    @patch("ingenious.utils.lazy_group.importlib.import_module")
-    def test_get_command_lazy_load_already_click_command(self, mock_import):
-        """Test lazy loading when sub_app is already a Click command"""
-        group = LazyGroup()
-        ctx = Mock(spec=Context)
-
-        # Mock the module and attribute - sub_app is already a Command
-        mock_module = Mock()
-        mock_sub_app = Mock(spec=Command)
-        mock_module.doc_app = mock_sub_app
-        mock_import.return_value = mock_module
-
-        with patch.object(TyperGroup, "get_command", return_value=None):
-            result = group.get_command(ctx, "document-processing")
-
-            assert result is mock_sub_app
-            mock_import.assert_called_once_with("ingenious.document_processing.cli")
-
-    @patch("ingenious.utils.lazy_group.importlib.import_module")
-    @patch("ingenious.utils.lazy_group.typer.echo")
-    def test_get_command_lazy_load_module_not_found(self, mock_echo, mock_import):
-        """Test lazy loading when module is not found"""
-        import typer
-
-        group = LazyGroup()
-        ctx = Mock(spec=Context)
-
-        # Mock ModuleNotFoundError
-        mock_import.side_effect = ModuleNotFoundError(
-            "No module named 'ingenious.document_processing.cli'"
-        )
-
-        with patch.object(TyperGroup, "get_command", return_value=None):
-            # Should raise typer.Exit
-            with pytest.raises(typer.Exit) as exc_info:
-                group.get_command(ctx, "document-processing")
-
-            # Check the exit code
-            assert exc_info.value.exit_code == 1
-
-            # Should display helpful message
-            mock_echo.assert_called_once()
-            error_msg = mock_echo.call_args[0][0]
-            assert "[document-processing] extra not installed" in error_msg
-            assert "pip install 'insight-ingenious[document-processing]'" in error_msg
+    @pytest.mark.skip(reason="Document processing commands moved to ingenious-aux")
+    def test_get_command_lazy_load_module_not_found(self):
+        """Test lazy loading when module is not found - no longer applicable"""
+        pass
 
     def test_loaders_registry_structure(self):
         """Test the structure of the _loaders registry"""
         group = LazyGroup()
 
-        # Check document-processing entry
-        doc_loader = group._loaders["document-processing"]
-        assert doc_loader[0] == "ingenious.document_processing.cli"
-        assert doc_loader[1] == "doc_app"
-        assert doc_loader[2] == "document-processing"
-
-        # Check dataprep entry
-        dataprep_loader = group._loaders["dataprep"]
-        assert dataprep_loader[0] == "ingenious.dataprep.cli"
-        assert dataprep_loader[1] == "dataprep"
-        assert dataprep_loader[2] == "dataprep"
+        # Registry should be empty after moving document processing commands
+        assert isinstance(group._loaders, dict)
+        assert len(group._loaders) == 0
 
     def test_class_exports(self):
         """Test that LazyGroup is properly exported"""

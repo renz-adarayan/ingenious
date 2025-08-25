@@ -1,5 +1,8 @@
+# ingenious/external_services/openai_service.py
+from __future__ import annotations
+
 import re
-from typing import AsyncIterator
+from typing import Any, AsyncIterator, Optional
 
 from openai import NOT_GIVEN, BadRequestError
 from openai.types.chat import (
@@ -30,84 +33,111 @@ class OpenAIService:
         client_id: str = "",
         client_secret: str = "",
         tenant_id: str = "",
+        *,
+        client: Optional[Any] = None,
     ):
-        # Use the centralized Azure client factory for consistent validation and authentication
+        """
+        Initialize the service.
+
+        Notes:
+        - For Azure OpenAI, `deployment` is the identifier you pass as `model=...`
+          to the Chat Completions API. If not provided, we default it to `open_ai_model`.
+        - You may inject a prebuilt `client` (useful in tests).
+        """
+        # Keep both for clarity: base model (for logs) and deployment (for API).
+        self.model = open_ai_model
+        self._deployment = deployment or open_ai_model
+
+        if client is not None:
+            self.client = client  # dependency injection for tests/advanced use
+            return
+
+        # Centralized client creation (lazy imports, shared auth rules)
         self.client = AzureClientFactory.create_openai_client_from_params(
             model=open_ai_model,
             base_url=azure_endpoint,
             api_version=api_version,
-            deployment=deployment,
+            deployment=self._deployment,
             api_key=api_key,
             authentication_method=authentication_method,
-            client_id=client_id,
-            client_secret=client_secret,
-            tenant_id=tenant_id,
+            # Prefer None over empty strings for AAD fields
+            client_id=client_id or None,
+            client_secret=client_secret or None,
+            tenant_id=tenant_id or None,
         )
-
-        self.model = open_ai_model
 
     async def generate_response(
         self,
         messages: list[ChatCompletionMessageParam],
         tools: list[ChatCompletionToolParam] | None = None,
         tool_choice: ChatCompletionToolChoiceOptionParam | None = None,
-        json_mode=False,
+        json_mode: bool = False,
     ) -> ChatCompletionMessage:
+        """
+        Generate a non-streaming response using Chat Completions.
+        """
         logger.debug(
             "Generating OpenAI response",
             model=self.model,
+            deployment=self._deployment,
             message_count=len(messages),
             has_tools=tools is not None,
             json_mode=json_mode,
         )
         try:
-            # Handle tool_choice parameter properly
-            effective_tool_choice = (
+            effective_tool_choice: Any = (
                 tool_choice
                 if tool_choice is not None
                 else ("auto" if tools else NOT_GIVEN)
             )
 
             response = self.client.chat.completions.create(
-                model=self.model,
+                # For Azure, this MUST be the deployment name:
+                model=self._deployment,
                 messages=messages,
                 tools=tools or NOT_GIVEN,
                 tool_choice=effective_tool_choice,
                 response_format={"type": "json_object"} if json_mode else NOT_GIVEN,
                 temperature=0.2,
             )
+
+            if not getattr(response, "choices", None):
+                raise RuntimeError(
+                    "OpenAI chat.completions.create returned a response missing 'choices' or it was empty"
+                )
             return response.choices[0].message
+
         except BadRequestError as error:
-            # Log the error with structured context
             logger.error(
                 "OpenAI API request failed",
                 error_type="BadRequestError",
-                error_code=error.code,
+                error_code=getattr(error, "code", None),
                 error_message=error.message,
                 model=self.model,
+                deployment=self._deployment,
                 exc_info=True,
             )
 
-            # Default to the general message from the exception
             message = error.message
-
-            # Check if the body is a dictionary and refine the message if possible
             if isinstance(error.body, dict):
                 message = error.body.get("message", message)
 
-                # Check for content filter specific errors
-                if error.code == "content_filter" and "innererror" in error.body:
+                # Content filter path
+                if (
+                    getattr(error, "code", None) == "content_filter"
+                    and "innererror" in error.body
+                ):
                     content_filter_results = error.body["innererror"].get(
                         "content_filter_result", {}
                     )
                     raise ContentFilterError(message, content_filter_results)
 
-                # Check for token limit errors
+                # Token limit (AOAI-style) pattern
                 token_error_pattern = (
                     r"This model's maximum context length is (\d+) tokens, "
                     r"however you requested (\d+) tokens \((\d+) in your prompt; "
-                    r"(\d+) for the completion\). Please reduce your prompt; or "
-                    r"completion length."
+                    r"(\d+) for the completion\)\. Please reduce your prompt; or "
+                    r"completion length\."
                 )
                 token_error_match = re.match(token_error_pattern, message)
                 if token_error_match:
@@ -126,6 +156,7 @@ class OpenAIService:
                     )
 
             raise Exception(message)
+
         except Exception as e:
             logger.exception(e)
             raise
@@ -135,29 +166,29 @@ class OpenAIService:
         messages: list[ChatCompletionMessageParam],
         tools: list[ChatCompletionToolParam] | None = None,
         tool_choice: ChatCompletionToolChoiceOptionParam | None = None,
-        json_mode=False,
+        json_mode: bool = False,
     ) -> AsyncIterator[str]:
-        """Generate streaming response from OpenAI API.
-
-        Yields content chunks as they are received from the OpenAI API.
+        """
+        Generate a streaming response using Chat Completions.
+        Yields content chunks as they arrive.
         """
         logger.debug(
             "Generating streaming OpenAI response",
             model=self.model,
+            deployment=self._deployment,
             message_count=len(messages),
             has_tools=tools is not None,
             json_mode=json_mode,
         )
         try:
-            # Handle tool_choice parameter properly
-            effective_tool_choice = (
+            effective_tool_choice: Any = (
                 tool_choice
                 if tool_choice is not None
                 else ("auto" if tools else NOT_GIVEN)
             )
 
-            response = self.client.chat.completions.create(
-                model=self.model,
+            stream = self.client.chat.completions.create(
+                model=self._deployment,  # Azure deployment name
                 messages=messages,
                 tools=tools or NOT_GIVEN,
                 tool_choice=effective_tool_choice,
@@ -166,22 +197,32 @@ class OpenAIService:
                 stream=True,
             )
 
-            for chunk in response:
-                if (
-                    chunk.choices
-                    and chunk.choices[0].delta
-                    and chunk.choices[0].delta.content
-                ):
-                    yield chunk.choices[0].delta.content
+            # Support both sync and async iterables to be future-proof
+            if hasattr(stream, "__aiter__"):
+                async for chunk in stream:  # type: ignore[unreachable]
+                    if (
+                        getattr(chunk, "choices", None)
+                        and chunk.choices[0].delta
+                        and chunk.choices[0].delta.content
+                    ):
+                        yield chunk.choices[0].delta.content
+            else:
+                for chunk in stream:
+                    if (
+                        getattr(chunk, "choices", None)
+                        and chunk.choices[0].delta
+                        and chunk.choices[0].delta.content
+                    ):
+                        yield chunk.choices[0].delta.content
 
         except BadRequestError as error:
-            # Same error handling as non-streaming version
             logger.error(
                 "OpenAI streaming API request failed",
                 error_type="BadRequestError",
-                error_code=error.code,
+                error_code=getattr(error, "code", None),
                 error_message=error.message,
                 model=self.model,
+                deployment=self._deployment,
                 exc_info=True,
             )
 
@@ -189,7 +230,10 @@ class OpenAIService:
             if isinstance(error.body, dict):
                 message = error.body.get("message", message)
 
-                if error.code == "content_filter" and "innererror" in error.body:
+                if (
+                    getattr(error, "code", None) == "content_filter"
+                    and "innererror" in error.body
+                ):
                     content_filter_results = error.body["innererror"].get(
                         "content_filter_result", {}
                     )
@@ -198,8 +242,8 @@ class OpenAIService:
                 token_error_pattern = (
                     r"This model's maximum context length is (\d+) tokens, "
                     r"however you requested (\d+) tokens \((\d+) in your prompt; "
-                    r"(\d+) for the completion\). Please reduce your prompt; or "
-                    r"completion length."
+                    r"(\d+) for the completion\)\. Please reduce your prompt; or "
+                    r"completion length\."
                 )
                 token_error_match = re.match(token_error_pattern, message)
                 if token_error_match:
@@ -218,6 +262,7 @@ class OpenAIService:
                     )
 
             raise Exception(message)
+
         except Exception as e:
             logger.exception(e)
             raise

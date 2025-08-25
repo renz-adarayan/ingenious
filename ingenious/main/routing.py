@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from ingenious.api.routes import auth as auth_route
 from ingenious.api.routes import chat as chat_route
 from ingenious.api.routes import conversation as conversation_route
+from ingenious.api.routes import custom_workflows as custom_workflows_route
 from ingenious.api.routes import diagnostic as diagnostic_route
 from ingenious.api.routes import message_feedback as message_feedback_route
 from ingenious.api.routes import prompts as prompts_route
@@ -44,6 +45,11 @@ class RouteManager:
         app.include_router(prompts_route.router, prefix="/api/v1", tags=["Prompts"])
         app.include_router(
             message_feedback_route.router, prefix="/api/v1", tags=["Message Feedback"]
+        )
+        app.include_router(
+            custom_workflows_route.router,
+            prefix="/api/v1",
+            tags=["Custom Workflows"],
         )
 
     @staticmethod
