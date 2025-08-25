@@ -25,6 +25,7 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
 
 - Deploy only required resources at minimal cost.
 - Use a new resource group: **<your-new-rg-name>**.
+- For the SQL Server SKU choose Basic - 5 DTUs
 - Azure CLI access is available.
 ```
 ### 5-Minute Setup
