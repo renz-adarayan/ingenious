@@ -37,9 +37,6 @@ Quick Start:
 Common Commands:
   init, serve, test, workflows, prompt-tuner
 
-Data Processing:
-  dataprep, document-processing
-
 Get help for any command with: ingen <command> --help
     """.strip(),
 )

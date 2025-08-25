@@ -59,13 +59,7 @@ class LazyGroup(TyperGroup):
     """
 
     _loaders: LoadRegistry = {
-        "document-processing": (
-            "ingenious.document_processing.cli",
-            "doc_app",
-            "document-processing",
-        ),
-        "dataprep": ("ingenious.dataprep.cli", "dataprep", "dataprep"),
-        "chunk": ("ingenious.chunk.cli", "cli", "chunk"),
+        # Document processing commands have been moved to ingenious-aux/document-preprocessing
     }
 
     def list_commands(self, ctx: Context) -> List[str]:

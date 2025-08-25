@@ -16,7 +16,6 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
-import requests
 
 from ingenious.errors.processing import (
     # Error codes and context
@@ -644,20 +643,14 @@ class TestExternalIntegration:
         assert log_data["cause"] == "Original cause"
         assert log_data["cause_type"] == "ValueError"
 
+    @pytest.mark.skip(
+        reason="document_processing module moved to ingenious-aux/document-preprocessing"
+    )
     def test_requests_exception_mapping(self):
         """Test mapping of requests exceptions to NetworkError."""
-        from ingenious.document_processing.utils.fetcher import fetch
-
-        with patch("requests.get") as mock_get:
-            # Test timeout
-            mock_get.side_effect = requests.Timeout("Request timeout")
-
-            # Should raise NetworkError, not requests.Timeout
-            with pytest.raises(NetworkError) as exc_info:
-                fetch("https://example.com/doc.pdf", raise_on_error=True)
-
-            assert exc_info.value.error_code == ErrorCode.NETWORK_TIMEOUT
-            assert exc_info.value.context.url == "https://example.com/doc.pdf"
+        # NOTE: This test has been disabled as the document_processing module
+        # has been moved to ingenious-aux/document-preprocessing
+        pass
 
     def test_path_like_objects(self):
         """Test error handling with pathlib.Path objects."""
