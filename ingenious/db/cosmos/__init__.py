@@ -763,34 +763,3 @@ class cosmos_ChatHistoryRepository(IChatHistoryRepository):
             return str(step_dict["id"])
         except Exception as e:
             raise DatabaseQueryError("Failed to add step in Cosmos", cause=e)
-
-    async def get_thread(self, thread_id: str) -> List[IChatHistoryRepository.Thread]:
-        """Get thread metadata by thread ID."""
-        try:
-            threads = list(
-                self.threads.query_items(
-                    query="SELECT * FROM c WHERE c.id = @tid",
-                    parameters=[{"name": "@tid", "value": thread_id}],
-                    enable_cross_partition_query=True,
-                )
-            )
-            result = []
-            for t in threads:
-                from uuid import UUID as _UUID
-
-                result.append(
-                    IChatHistoryRepository.Thread(
-                        id=_UUID(t.get("id", "00000000-0000-0000-0000-000000000000")),
-                        createdAt=t.get("createdAt"),
-                        name=t.get("name"),
-                        userId=_UUID(
-                            t.get("userId", "00000000-0000-0000-0000-000000000000")
-                        ),
-                        userIdentifier=t.get("userIdentifier"),
-                        tags=t.get("tags"),
-                        metadata=t.get("metadata"),
-                    )
-                )
-            return result
-        except Exception as e:
-            raise DatabaseQueryError("Failed to get thread in Cosmos", cause=e)
