@@ -1,8 +1,0 @@
-kb_service_endpoint: https://s.net
-kb_service_index_name: idx
-kb_service_key_masked: s***k
-kb_service_key_is_mock: false
-env_AZURE_SEARCH_ENDPOINT: https://env.example
-env_AZURE_SEARCH_INDEX_NAME: docs
-env_AZURE_SEARCH_KEY_masked: env-...6789 (len=20)
-env_key_equals_service_key: false
