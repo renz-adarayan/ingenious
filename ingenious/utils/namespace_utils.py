@@ -382,11 +382,6 @@ def get_workflow_metadata(workflow_name: str) -> Dict[str, Any]:
     return _workflow_discovery.get_workflow_metadata(workflow_name)
 
 
-def clear_workflow_cache() -> None:
-    """Clear workflow discovery caches."""
-    _workflow_discovery.clear_cache()
-
-
 # DEPRECATED FUNCTIONS - Issue warnings and delegate to new implementation
 def import_module_safely(module_name: str, class_name: str) -> Any:
     """
