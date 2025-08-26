@@ -96,13 +96,16 @@ class ConversationFlow(IConversationFlow):
             try:
                 with pyodbc.connect(connection_string) as conn:
                     cursor = conn.cursor()
-                    # Get column information
-                    cursor.execute(f"""
+                    # Get column information - use parameterized query
+                    cursor.execute(
+                        """
                         SELECT COLUMN_NAME
                         FROM INFORMATION_SCHEMA.COLUMNS
-                        WHERE TABLE_NAME = '{table_name}'
+                        WHERE TABLE_NAME = ?
                         ORDER BY ORDINAL_POSITION
-                    """)
+                    """,
+                        (table_name,),
+                    )
                     column_names = [row[0] for row in cursor.fetchall()]
 
                     if not column_names:
