@@ -285,14 +285,8 @@ class WebSettings(BaseModel):
     asynchronous: bool = Field(
         False, description="Enable asynchronous response handling"
     )
-    enable_streaming: bool = Field(
-        True, description="Enable streaming responses for chat endpoints"
-    )
     streaming_chunk_size: int = Field(
         100, description="Maximum characters per streaming chunk"
-    )
-    streaming_delay_ms: int = Field(
-        50, description="Delay between streaming chunks in milliseconds"
     )
     authentication: WebAuthenticationSettings = WebAuthenticationSettings()
 
