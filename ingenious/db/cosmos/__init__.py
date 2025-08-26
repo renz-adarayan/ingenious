@@ -298,6 +298,42 @@ class cosmos_ChatHistoryRepository(IChatHistoryRepository):
             )
         )
 
+    def _query_steps_for_threads(
+        self, thread_ids: List[str]
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """Query all steps for given thread IDs."""
+        steps_by_thread: Dict[str, List[Dict[str, Any]]] = {
+            tid: [] for tid in thread_ids
+        }
+        for tid in thread_ids:
+            docs = list(
+                self.steps.query_items(
+                    query="SELECT * FROM c WHERE c.threadId = @tid ORDER BY c.createdAt ASC",
+                    parameters=[{"name": "@tid", "value": tid}],
+                    enable_cross_partition_query=True,
+                )
+            )
+            steps_by_thread[tid] = docs
+        return steps_by_thread
+
+    def _query_elements_for_threads(
+        self, thread_ids: List[str]
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """Query all elements for given thread IDs."""
+        elements_by_thread: Dict[str, List[Dict[str, Any]]] = {
+            tid: [] for tid in thread_ids
+        }
+        for tid in thread_ids:
+            docs = list(
+                self.elements.query_items(
+                    query="SELECT * FROM c WHERE c.threadId = @tid",
+                    parameters=[{"name": "@tid", "value": tid}],
+                    enable_cross_partition_query=True,
+                )
+            )
+            elements_by_thread[tid] = docs
+        return elements_by_thread
+
     async def get_threads_for_user(
         self, identifier: str, thread_id: Optional[str]
     ) -> Optional[List[IChatHistoryRepository.ThreadDict]]:
@@ -308,34 +344,8 @@ class cosmos_ChatHistoryRepository(IChatHistoryRepository):
                 return []
 
             thread_ids = [t["id"] for t in threads]
-
-            # Steps
-            steps_by_thread: Dict[str, List[Dict[str, Any]]] = {
-                tid: [] for tid in thread_ids
-            }
-            for tid in thread_ids:
-                docs = list(
-                    self.steps.query_items(
-                        query="SELECT * FROM c WHERE c.threadId = @tid ORDER BY c.createdAt ASC",
-                        parameters=[{"name": "@tid", "value": tid}],
-                        enable_cross_partition_query=True,
-                    )
-                )
-                steps_by_thread[tid] = docs
-
-            # Elements
-            elements_by_thread: Dict[str, List[Dict[str, Any]]] = {
-                tid: [] for tid in thread_ids
-            }
-            for tid in thread_ids:
-                docs = list(
-                    self.elements.query_items(
-                        query="SELECT * FROM c WHERE c.threadId = @tid",
-                        parameters=[{"name": "@tid", "value": tid}],
-                        enable_cross_partition_query=True,
-                    )
-                )
-                elements_by_thread[tid] = docs
+            steps_by_thread = self._query_steps_for_threads(thread_ids)
+            elements_by_thread = self._query_elements_for_threads(thread_ids)
 
             result: List[IChatHistoryRepository.ThreadDict] = []
             for t in threads:
