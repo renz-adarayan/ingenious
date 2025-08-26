@@ -191,23 +191,6 @@ class AzureClientBuilder(ABC):
         return self.auth_config.api_key
 
     @property
-    def key_credential(self) -> AzureKeyCredential:
-        """
-        Get AzureKeyCredential specifically for services that only accept AzureKeyCredential.
-        """
-        if self.auth_config.authentication_method != AuthenticationMethod.TOKEN:
-            raise ValueError(
-                "key_credential property is only valid for TOKEN authentication method"
-            )
-
-        # Use the centralized validation to ensure consistency
-        self.auth_config.validate_for_method()
-
-        # Type assertion is safe here because validation ensures api_key is not None
-        assert self.auth_config.api_key is not None
-        return AzureKeyCredential(self.auth_config.api_key)
-
-    @property
     def token_credential(self) -> TokenCredential:
         """
         Get TokenCredential specifically for services that only accept TokenCredential.
