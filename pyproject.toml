@@ -301,7 +301,6 @@ module = [
   "ingenious.services.chat_services.multi_agent.*",
   "ingenious.services.sql_agent.*",
   "ingenious.utils.*",
-  "ingenious.models.ca_raw_fixture_data.*",
   "ingenious.db.cosmos.*",
   "ingenious.client.azure.builder.*",
   "ingenious.auth.*",
