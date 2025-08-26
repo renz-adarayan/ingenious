@@ -275,29 +275,34 @@ class cosmos_ChatHistoryRepository(IChatHistoryRepository):
                 "Failed to get thread messages from Cosmos", cause=e
             )
 
+    def _query_threads(
+        self, identifier: str, thread_id: Optional[str]
+    ) -> List[Dict[str, Any]]:
+        """Query threads for a user, optionally filtered by thread ID."""
+        if thread_id:
+            return list(
+                self.threads.query_items(
+                    query="SELECT * FROM c WHERE c.userIdentifier = @uid AND c.id = @tid",
+                    parameters=[
+                        {"name": "@uid", "value": identifier},
+                        {"name": "@tid", "value": thread_id},
+                    ],
+                    enable_cross_partition_query=True,
+                )
+            )
+        return list(
+            self.threads.query_items(
+                query="SELECT TOP 100 * FROM c WHERE c.userIdentifier = @uid ORDER BY c.createdAt DESC",
+                parameters=[{"name": "@uid", "value": identifier}],
+                enable_cross_partition_query=True,
+            )
+        )
+
     async def get_threads_for_user(
         self, identifier: str, thread_id: Optional[str]
     ) -> Optional[List[IChatHistoryRepository.ThreadDict]]:
         try:
-            if thread_id:
-                threads = list(
-                    self.threads.query_items(
-                        query="SELECT * FROM c WHERE c.userIdentifier = @uid AND c.id = @tid",
-                        parameters=[
-                            {"name": "@uid", "value": identifier},
-                            {"name": "@tid", "value": thread_id},
-                        ],
-                        enable_cross_partition_query=True,
-                    )
-                )
-            else:
-                threads = list(
-                    self.threads.query_items(
-                        query="SELECT TOP 100 * FROM c WHERE c.userIdentifier = @uid ORDER BY c.createdAt DESC",
-                        parameters=[{"name": "@uid", "value": identifier}],
-                        enable_cross_partition_query=True,
-                    )
-                )
+            threads = self._query_threads(identifier, thread_id)
 
             if not threads:
                 return []
