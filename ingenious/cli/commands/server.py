@@ -24,7 +24,7 @@ class ServeCommand(BaseCommand):
         self,
         config: Optional[str] = None,
         profile: Optional[str] = None,
-        host: str = "0.0.0.0",
+        host: str = "127.0.0.1",
         port: Optional[int] = None,
         no_prompt_tuner: bool = False,
         **kwargs: object,
@@ -126,7 +126,7 @@ def register_commands(app: typer.Typer, console: Console) -> None:
             typer.Option(
                 "--host", "-h", help="Host to bind the server (default: 0.0.0.0)"
             ),
-        ] = "0.0.0.0",
+        ] = "127.0.0.1",
         port: Annotated[
             int,
             typer.Option(

@@ -11,6 +11,8 @@ import os
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from fastapi import FastAPI
+
     from ingenious.config.main_settings import IngeniousSettings
 import pkgutil
 from pathlib import Path
@@ -68,7 +70,7 @@ def register_commands(app: typer.Typer, console: Console) -> None:
             typer.Option(
                 "--host", "-h", help="Host to bind the server (default: 0.0.0.0)"
             ),
-        ] = "0.0.0.0",
+        ] = "127.0.0.1",
         port: Annotated[
             int,
             typer.Option(
@@ -134,9 +136,9 @@ def register_commands(app: typer.Typer, console: Console) -> None:
         host: Annotated[
             str,
             typer.Argument(
-                help="The host to run the server on. Default is 0.0.0.0. For local development outside of docker use 127.0.0.1"
+                help="The host to run the server on. Default is 127.0.0.1. For docker or external access use 0.0.0.0"
             ),
-        ] = "0.0.0.0",
+        ] = "127.0.0.1",
         port: Annotated[
             int,
             typer.Argument(help="The port to run the server on. Default is 80."),
