@@ -52,13 +52,6 @@ class ImportValidationError(Exception):
     pass
 
 
-class ImportableProtocol(Protocol):
-    """Protocol for objects that can be dynamically imported."""
-
-    __module__: str
-    __name__: str
-
-
 class WorkflowProtocol(Protocol):
     """Protocol for workflow classes."""
 
