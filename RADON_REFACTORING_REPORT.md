@@ -9,8 +9,10 @@ Used Radon to identify and refactor high-complexity code hotspots in the Ingenio
 1. **LLMUsageTracker.emit** - Grade E (CC=33) → **REFACTORED to Grade B (CC=6)** ✅
 2. **multi_agent_chat_service.get_chat_response** - Grade E (CC=31) → **REFACTORED to Grade A (CC=1)** ✅
 3. **ConversationFlow._search_knowledge_base** - Grade E (CC=40) → **REFACTORED to Grade B (CC=7)** ✅
-4. **ValidateCommand._validate_environment_variables** - Grade D (CC=29)
-5. **ValidateCommand._validate_configuration_files** - Grade D (CC=27)
+4. **DynamicRankFuser.fuse** - Grade D (CC=27) → **REFACTORED to Grade A (CC=3)** ✅
+5. **ValidateCommand._validate_environment_variables** - Grade D (CC=29)
+6. **ValidateCommand._validate_configuration_files** - Grade D (CC=27)
+7. **ValidateCommand._validate_azure_connectivity** - Grade D (CC=23)
 
 ### Lowest Maintainability Index Files
 1. ingenious/models/ca_raw_fixture_data.py - MI=0.00
@@ -84,28 +86,50 @@ Used Radon to identify and refactor high-complexity code hotspots in the Ingenio
 
 **Test Results**: All 61 knowledge base tests passing ✅
 
+### 4. DynamicRankFuser.fuse Method
+**File**: `ingenious/services/azure_search/components/fusion.py`
+
+**Changes**:
+- Extracted 7 focused helper methods from monolithic fuse method
+- Reduced cyclomatic complexity from 27 to 3 (D → A grade)
+- Improved separation of concerns
+
+**New Helper Methods**:
+- `_safe_float()` - Safe type conversion to float
+- `_build_score_lookups()` - Build normalized and raw score lookups
+- `_compute_alpha()` - Compute fusion weight based on results
+- `_combine_results()` - Combine lexical and vector results
+- `_process_lexical_result()` - Process single lexical result
+- `_process_vector_result()` - Process single vector result
+- `_sort_fused_results()` - Sort results with tiebreakers
+
+**Test Results**: All 25 fusion tests passing ✅
+
 ## Recommendations for Next Steps
 
 ### High Priority (E-grade complexity)
-✅ ~~1. **Refactor ConversationFlow._search_knowledge_base**~~ (Completed)
+✅ ~~All E-grade methods have been refactored~~
 
 ### Medium Priority (D-grade complexity)
-- ValidateCommand methods need decomposition
-- DynamicRankFuser.fuse requires simplification
+✅ ~~DynamicRankFuser.fuse~~ (Completed)
+- ValidateCommand._validate_environment_variables (CC=29)
+- ValidateCommand._validate_configuration_files (CC=27)
+- ValidateCommand._validate_azure_connectivity (CC=23)
 
 ### Low Priority (C-grade complexity)
 - Configuration validation functions
 - Profile parsing methods
 
 ## Impact
-- **Code Quality**: Reduced complexity from E to B/A grades for all three refactored methods
+- **Code Quality**: Reduced complexity from E/D to B/A grades for all four refactored methods
 - **Maintainability**: Significantly improved code readability and testability
-- **Technical Debt**: Reduced future maintenance burden for three critical components
-- **Testing**: All existing tests continue to pass (10 + 3 + 61 = 74 tests)
+- **Technical Debt**: Reduced future maintenance burden for four critical components
+- **Testing**: All existing tests continue to pass (10 + 3 + 61 + 25 = 99 tests)
 - **Metrics**:
   - 97% complexity reduction for get_chat_response (31→1)
   - 82% complexity reduction for emit (33→6)
   - 82.5% complexity reduction for _search_knowledge_base (40→7)
+  - 89% complexity reduction for fuse (27→3)
 
 ## Git Commits
 ```bash
