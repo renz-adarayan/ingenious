@@ -220,4 +220,8 @@ def edit_file(filename):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host=HOST, port=PORT)
+    # Use environment variable to control debug mode, defaulting to False
+    import os
+
+    debug_mode = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    app.run(debug=debug_mode, host=HOST, port=PORT)
