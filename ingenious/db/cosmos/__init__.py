@@ -334,6 +334,120 @@ class cosmos_ChatHistoryRepository(IChatHistoryRepository):
             elements_by_thread[tid] = docs
         return elements_by_thread
 
+    def _get_feedback_for_step(
+        self, step_id: str, thread_id: str
+    ) -> Optional[IChatHistoryRepository.FeedbackDict]:
+        """Query and parse feedback for a specific step."""
+        feedback_docs = list(
+            self.feedbacks.query_items(
+                query="SELECT * FROM c WHERE c.forId = @fid AND c.threadId = @tid",
+                parameters=[
+                    {"name": "@fid", "value": step_id},
+                    {"name": "@tid", "value": thread_id},
+                ],
+                enable_cross_partition_query=True,
+            )
+        )
+        if not feedback_docs:
+            return None
+
+        fb = feedback_docs[0]
+        return IChatHistoryRepository.FeedbackDict(
+            forId=str(step_id),
+            id=str(fb.get("id")) if fb.get("id") else None,
+            value=1 if int(fb.get("value", 0) or 0) == 1 else 0,
+            comment=fb.get("comment"),
+        )
+
+    def _normalize_step_type(self, raw_type: str) -> str:
+        """Normalize step type to allowed values."""
+        allowed_step_types = {
+            "run",
+            "tool",
+            "llm",
+            "embedding",
+            "retrieval",
+            "rerank",
+            "undefined",
+            "user_message",
+            "assistant_message",
+            "system_message",
+        }
+        return raw_type if raw_type in allowed_step_types else "undefined"
+
+    def _build_step_dict(
+        self,
+        sd: Dict[str, Any],
+        tid: str,
+        feedback: Optional[IChatHistoryRepository.FeedbackDict],
+    ) -> IChatHistoryRepository.StepDict:
+        """Build a StepDict from raw step data."""
+        raw_step_type = str(sd.get("type", "undefined"))
+        step_type = self._normalize_step_type(raw_step_type)
+
+        step_dict: IChatHistoryRepository.StepDict = {
+            "id": str(sd.get("id", "")),
+            "name": str(sd.get("name", "")),
+            "type": cast(IChatHistoryRepository.StepType, step_type),
+            "threadId": str(sd.get("threadId", tid)),
+            "disableFeedback": bool(sd.get("disableFeedback", False)),
+            "streaming": bool(sd.get("streaming", False)),
+        }
+
+        # Add optional string fields
+        for field in [
+            "parentId",
+            "input",
+            "output",
+            "createdAt",
+            "start",
+            "end",
+            "language",
+        ]:
+            if sd.get(field) is not None:
+                step_dict[field] = str(sd.get(field))
+
+        # Add optional boolean fields
+        for field in ["waitForAnswer", "isError"]:
+            if sd.get(field) is not None:
+                step_dict[field] = bool(sd.get(field))
+
+        # Add metadata if it's a dict
+        if sd.get("metadata") is not None:
+            meta = sd.get("metadata")
+            if isinstance(meta, dict):
+                step_dict["metadata"] = meta
+
+        # Add tags
+        if sd.get("tags") is not None:
+            step_dict["tags"] = sd.get("tags")
+
+        # Add generation if it's a dict
+        if sd.get("generation") is not None:
+            gen = sd.get("generation")
+            if isinstance(gen, dict):
+                step_dict["generation"] = gen
+
+        # Add showInput (bool or str)
+        if sd.get("showInput") is not None:
+            show_input = sd.get("showInput")
+            if isinstance(show_input, (bool, str)):
+                step_dict["showInput"] = show_input
+
+        # Add indent (int)
+        if sd.get("indent") is not None:
+            _indent = sd.get("indent")
+            if isinstance(_indent, (int, str)):
+                try:
+                    step_dict["indent"] = int(_indent)
+                except Exception:
+                    pass
+
+        if feedback is not None:
+            step_dict["feedback"] = feedback
+
+        return step_dict
+
     async def get_threads_for_user(
         self, identifier: str, thread_id: Optional[str]
     ) -> Optional[List[IChatHistoryRepository.ThreadDict]]:
@@ -368,93 +482,8 @@ class cosmos_ChatHistoryRepository(IChatHistoryRepository):
                 # Steps with feedback join (do per step)
                 steps_docs = steps_by_thread.get(tid, [])
                 for sd in steps_docs:
-                    feedback_docs = list(
-                        self.feedbacks.query_items(
-                            query="SELECT * FROM c WHERE c.forId = @fid AND c.threadId = @tid",
-                            parameters=[
-                                {"name": "@fid", "value": sd.get("id")},
-                                {"name": "@tid", "value": tid},
-                            ],
-                            enable_cross_partition_query=True,
-                        )
-                    )
-                    feedback = None
-                    if feedback_docs:
-                        fb = feedback_docs[0]
-                        feedback = IChatHistoryRepository.FeedbackDict(
-                            forId=str(sd.get("id", "")),
-                            id=str(fb.get("id")) if fb.get("id") else None,
-                            value=1 if int(fb.get("value", 0) or 0) == 1 else 0,
-                            comment=fb.get("comment"),
-                        )
-
-                    # Coerce type to allowed StepType values
-                    raw_step_type = str(sd.get("type", "undefined"))
-                    allowed_step_types = {
-                        "run",
-                        "tool",
-                        "llm",
-                        "embedding",
-                        "retrieval",
-                        "rerank",
-                        "undefined",
-                        "user_message",
-                        "assistant_message",
-                        "system_message",
-                    }
-                    if raw_step_type not in allowed_step_types:
-                        raw_step_type = "undefined"
-                    step_dict: IChatHistoryRepository.StepDict = {
-                        "id": str(sd.get("id", "")),
-                        "name": str(sd.get("name", "")),
-                        "type": cast(IChatHistoryRepository.StepType, raw_step_type),
-                        "threadId": str(sd.get("threadId", tid)),
-                        "disableFeedback": bool(sd.get("disableFeedback", False)),
-                        "streaming": bool(sd.get("streaming", False)),
-                    }
-                    # Optional fields only when present
-                    if sd.get("parentId") is not None:
-                        step_dict["parentId"] = str(sd.get("parentId"))
-                    if sd.get("waitForAnswer") is not None:
-                        step_dict["waitForAnswer"] = bool(sd.get("waitForAnswer"))
-                    if sd.get("isError") is not None:
-                        step_dict["isError"] = bool(sd.get("isError"))
-                    if sd.get("metadata") is not None:
-                        meta = sd.get("metadata")
-                        if isinstance(meta, dict):
-                            step_dict["metadata"] = meta
-                    if sd.get("tags") is not None:
-                        step_dict["tags"] = sd.get("tags")
-                    if sd.get("input") is not None:
-                        step_dict["input"] = str(sd.get("input"))
-                    if sd.get("output") is not None:
-                        step_dict["output"] = str(sd.get("output"))
-                    if sd.get("createdAt") is not None:
-                        step_dict["createdAt"] = str(sd.get("createdAt"))
-                    if sd.get("start") is not None:
-                        step_dict["start"] = str(sd.get("start"))
-                    if sd.get("end") is not None:
-                        step_dict["end"] = str(sd.get("end"))
-                    if sd.get("generation") is not None:
-                        gen = sd.get("generation")
-                        if isinstance(gen, dict):
-                            step_dict["generation"] = gen
-                    if sd.get("showInput") is not None:
-                        show_input = sd.get("showInput")
-                        if isinstance(show_input, (bool, str)):
-                            step_dict["showInput"] = show_input
-                    if sd.get("language") is not None:
-                        step_dict["language"] = str(sd.get("language"))
-                    if sd.get("indent") is not None:
-                        _indent = sd.get("indent")
-                        if isinstance(_indent, (int, str)):
-                            try:
-                                step_dict["indent"] = int(_indent)
-                            except Exception:
-                                pass
-                    if feedback is not None:
-                        step_dict["feedback"] = feedback
-
+                    feedback = self._get_feedback_for_step(sd.get("id"), tid)
+                    step_dict = self._build_step_dict(sd, tid, feedback)
                     steps_list.append(step_dict)
 
                 # Elements
