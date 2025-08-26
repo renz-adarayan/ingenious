@@ -26,9 +26,6 @@ from ingenious.config.models import (
     FileStorageContainerSettings,
     ModelSettings,
 )
-from ingenious.models.config import (
-    ModelConfig,
-)
 
 
 class TestAzureClientFactory:
@@ -46,24 +43,21 @@ class TestAzureClientFactory:
         mock_builder.build.return_value = mock_client
         mock_builder_class.return_value = mock_builder
 
-        # Build a proper ModelConfig with mocked config and profile
-        mock_config_ns = Mock()
-        mock_config_ns.model = "gpt-4"
-        mock_config_ns.api_type = "rest"
-        mock_config_ns.api_version = "2023-03-15-preview"
-        mock_config_ns.deployment = "test-deployment"
+        # Create ModelSettings instead of ModelConfig to avoid complex initialization
+        from ingenious.config.models import ModelSettings
 
-        mock_profile = Mock()
-        mock_profile.deployment = "test-deployment"
-        mock_profile.api_version = "2023-03-15-preview"
-        mock_profile.authentication_method = AuthenticationMethod.DEFAULT_CREDENTIAL
-        mock_profile.client_id = None
-        mock_profile.client_secret = None
-        mock_profile.tenant_id = None
-        mock_profile.api_key = None
-        mock_profile.base_url = "https://test.openai.azure.com/"
-
-        model_config = ModelConfig(mock_config_ns, mock_profile)
+        model_config = ModelSettings(
+            model="gpt-4",
+            base_url="https://test.openai.azure.com/",
+            api_version="2023-03-15-preview",
+            deployment="test-deployment",
+            api_type="rest",
+            authentication_method=AuthenticationMethod.DEFAULT_CREDENTIAL,
+            client_id="",
+            client_secret="",
+            tenant_id="",
+            api_key="",
+        )
 
         # Act
         result = AzureClientFactory.create_openai_client(model_config)
@@ -181,24 +175,21 @@ class TestAzureClientFactory:
         mock_builder.build.return_value = mock_client
         mock_builder_class.return_value = mock_builder
 
-        # Build a proper ModelConfig with mocked config and profile
-        mock_config_ns = Mock()
-        mock_config_ns.model = "gpt-4"
-        mock_config_ns.api_type = "rest"
-        mock_config_ns.api_version = "2023-05-15"
-        mock_config_ns.deployment = "gpt-4"
+        # Create ModelSettings instead of ModelConfig to avoid complex initialization
+        from ingenious.config.models import ModelSettings
 
-        mock_profile = Mock()
-        mock_profile.deployment = "gpt-4"
-        mock_profile.api_version = "2023-05-15"
-        mock_profile.authentication_method = AuthenticationMethod.TOKEN
-        mock_profile.client_id = "test-client-id"
-        mock_profile.client_secret = "test-client-secret"
-        mock_profile.tenant_id = "test-tenant-id"
-        mock_profile.api_key = "test-key"
-        mock_profile.base_url = "https://test.openai.azure.com/"
-
-        model_config = ModelConfig(mock_config_ns, mock_profile)
+        model_config = ModelSettings(
+            model="gpt-4",
+            base_url="https://test.openai.azure.com/",
+            api_version="2023-05-15",
+            deployment="gpt-4",
+            api_type="rest",
+            authentication_method=AuthenticationMethod.TOKEN,
+            client_id="test-client-id",
+            client_secret="test-client-secret",
+            tenant_id="test-tenant-id",
+            api_key="test-key",
+        )
 
         # Act
         result = AzureClientFactory.create_openai_chat_completion_client(model_config)
