@@ -149,10 +149,6 @@ test-output/
 # chainlit
 .chainlit/
 
-# AI
-CLAUDE.md
-.claude/
-
 # AI Testing
 test_dir/
 azure_integration_test/
