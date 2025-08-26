@@ -79,6 +79,151 @@ class AzureSearchProvider:
 
     # ----------------------------- Public API ------------------------------
 
+    def _prepare_search_params(self, query: str, limit: int) -> Dict[str, Any]:
+        """Prepare common search parameters for raw client searches."""
+        params: Dict[str, Any] = {"search_text": query, "top": limit}
+        try:
+            from azure.search.documents.models import QueryType as _QT
+        except Exception:
+            _QT = None
+        if _QT is not None and getattr(_QT, "SIMPLE", None) is not None:
+            params["query_type"] = getattr(_QT, "SIMPLE")
+        return params
+
+    def _apply_cleaner(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Apply the pipeline's cleaner function if available."""
+        cleaner = getattr(self._pipeline, "_clean_sources", None)
+        return cleaner(results) if callable(cleaner) else results
+
+    async def _try_lexical_fallback(
+        self, query: str, limit: int
+    ) -> List[Dict[str, Any]]:
+        """Try lexical-only fallback via the pipeline's retriever."""
+        try:
+            logger.debug(
+                "Provider.retrieve – calling retriever.search_lexical(%r)", query
+            )
+            lex = await self._pipeline.retriever.search_lexical(query)
+            logger.debug(
+                "Provider.retrieve – lexical fallback returned %d rows", len(lex)
+            )
+            if lex:
+                head = lex[:limit]
+                return self._apply_cleaner(head)
+        except Exception as exc:
+            logger.debug(
+                "Provider.retrieve – lexical fallback failed; will try last‑mile client search.",
+                exc_info=exc,
+            )
+        return []
+
+    async def _try_raw_client_search(
+        self, params: Dict[str, Any], limit: int
+    ) -> List[Dict[str, Any]]:
+        """Try search using the retriever's raw client."""
+        if limit <= 0:
+            return []
+
+        client = getattr(self._pipeline.retriever, "_search_client", None)
+        logger.debug(
+            "Provider.retrieve – last‑mile check: client=%s has_search=%s",
+            (type(client).__name__ if client else None),
+            bool(client and hasattr(client, "search")),
+        )
+
+        if client and hasattr(client, "search"):
+            try:
+                logger.debug("Provider.retrieve – last‑mile client.search(%r)", params)
+                results = await client.search(**params)
+                raw: List[Dict[str, Any]] = []
+                async for row in results:
+                    raw.append(dict(row))
+                logger.debug("Provider.retrieve – last‑mile yielded %d rows", len(raw))
+                if raw:
+                    return self._apply_cleaner(raw)
+            except Exception as exc:
+                logger.debug(
+                    "Provider.retrieve – last‑mile client search failed.", exc_info=exc
+                )
+        return []
+
+    def _check_factory_seam(self) -> tuple[Any, bool]:
+        """Check if factory seam is patched (test mode)."""
+        try:
+            from . import client_init as _ci
+
+            factory = getattr(_ci, "_get_factory", None)
+            factory = (
+                factory()
+                if callable(factory)
+                else getattr(_ci, "AzureClientFactory", None)
+            )
+            factory_mod = getattr(factory, "__module__", "")
+            seam_is_patched = ".tests." in factory_mod or factory_mod.endswith(".tests")
+            logger.debug(
+                "Provider.retrieve – factory seam: factory=%s (patched=%s)",
+                factory,
+                seam_is_patched,
+            )
+            return factory, seam_is_patched
+        except Exception:
+            return None, False
+
+    async def _try_factory_client_search(
+        self, params: Dict[str, Any], limit: int
+    ) -> List[Dict[str, Any]]:
+        """Try search using factory-created one-shot client (only in test mode)."""
+        if limit <= 0:
+            return []
+
+        factory, seam_is_patched = self._check_factory_seam()
+        if not factory or not seam_is_patched:
+            return []
+
+        ep, sk, idx = self._robust_discover_service_triplet()
+
+        # In clearly patched test scenarios, allow placeholders if discovery is empty
+        if (not ep or not sk or not idx) and seam_is_patched:
+            retr = getattr(self._pipeline, "retriever", None)
+            idx = idx or getattr(retr, "_index_name", None) or "idx"
+            ep = ep or "https://unit-test"
+            sk = sk or "sk"
+
+        if not (ep and sk and idx):
+            logger.debug(
+                "Provider.retrieve – factory path: incomplete config (ep=%s sk=%s idx=%s)",
+                bool(ep),
+                bool(sk),
+                bool(idx),
+            )
+            return []
+
+        temp_client = factory.create_async_search_client(
+            index_name=idx,
+            config={"endpoint": ep, "search_key": sk},
+        )
+
+        try:
+            logger.debug("Provider.retrieve – factory client.search(%r)", params)
+            tmp_raw: List[Dict[str, Any]] = []
+            results = await temp_client.search(**params)
+            async for row in results:
+                tmp_raw.append(dict(row))
+            logger.debug(
+                "Provider.retrieve – factory path yielded %d rows",
+                len(tmp_raw),
+            )
+            if tmp_raw:
+                return self._apply_cleaner(tmp_raw)
+        finally:
+            close = getattr(temp_client, "close", None)
+            if callable(close):
+                try:
+                    await close()
+                except Exception:
+                    pass
+        return []
+
     async def retrieve(self, query: str, top_k: int = 10) -> List[Dict[str, Any]]:
         """Delegate to the pipeline's retrieval/ranking path, with safe fallbacks.
 
@@ -103,134 +248,21 @@ class AzureSearchProvider:
         limit = max(0, int(top_k))
         logger.debug("Provider.retrieve – fallback path engaged (limit=%d)", limit)
 
-        # ---- 3a. Lexical fallback via retriever ---------------------------------
-        lex: List[Dict[str, Any]] = []
-        try:
-            logger.debug(
-                "Provider.retrieve – calling retriever.search_lexical(%r)", query
-            )
-            lex = await self._pipeline.retriever.search_lexical(query)
-            logger.debug(
-                "Provider.retrieve – lexical fallback returned %d rows", len(lex)
-            )
-        except Exception as exc:
-            logger.debug(
-                "Provider.retrieve – lexical fallback failed; will try last‑mile client search.",
-                exc_info=exc,
-            )
+        # Try lexical fallback
+        lex_results = await self._try_lexical_fallback(query, limit)
+        if lex_results:
+            return lex_results
 
-        if lex:
-            head = lex[:limit]
-            cleaner = getattr(self._pipeline, "_clean_sources", None)
-            return cleaner(head) if callable(cleaner) else head
+        # Prepare params and try raw client search
+        params = self._prepare_search_params(query, limit)
+        raw_results = await self._try_raw_client_search(params, limit)
+        if raw_results:
+            return raw_results
 
-        # ---- Common params for raw client searches ------------------------------
-        params: Dict[str, Any] = {"search_text": query, "top": limit}
-        try:
-            from azure.search.documents.models import QueryType as _QT
-        except Exception:
-            _QT = None
-        if _QT is not None and getattr(_QT, "SIMPLE", None) is not None:
-            params["query_type"] = getattr(_QT, "SIMPLE")
-
-        # ---- 3b. Last‑mile: use the retriever's raw client if present -----------
-        raw: List[Dict[str, Any]] = []
-        client = getattr(self._pipeline.retriever, "_search_client", None)
-        logger.debug(
-            "Provider.retrieve – last‑mile check: client=%s has_search=%s",
-            (type(client).__name__ if client else None),
-            bool(client and hasattr(client, "search")),
-        )
-        if limit > 0 and client and hasattr(client, "search"):
-            try:
-                logger.debug("Provider.retrieve – last‑mile client.search(%r)", params)
-                results = await client.search(**params)
-                async for row in results:
-                    raw.append(dict(row))
-                logger.debug("Provider.retrieve – last‑mile yielded %d rows", len(raw))
-                if raw:
-                    cleaner = getattr(self._pipeline, "_clean_sources", None)
-                    return cleaner(raw) if callable(cleaner) else raw
-            except Exception as exc:
-                logger.debug(
-                    "Provider.retrieve – last‑mile client search failed.", exc_info=exc
-                )
-
-        # ---- 3c. Factory-created one-shot client (only when seam is patched) ----
-        if limit > 0:
-            try:
-                from . import client_init as _ci  # local import to avoid cycles
-
-                factory = getattr(_ci, "_get_factory", None)
-                factory = (
-                    factory()
-                    if callable(factory)
-                    else getattr(_ci, "AzureClientFactory", None)
-                )
-
-                factory_mod = getattr(factory, "__module__", "")
-                seam_is_patched = ".tests." in factory_mod or factory_mod.endswith(
-                    ".tests"
-                )
-                should_try_factory = seam_is_patched
-                logger.debug(
-                    "Provider.retrieve – factory seam: factory=%s (patched=%s)",
-                    factory,
-                    seam_is_patched,
-                )
-
-                if factory and should_try_factory:
-                    ep, sk, idx = self._robust_discover_service_triplet()
-                    # In clearly patched test scenarios, allow placeholders if discovery is empty
-                    if (not ep or not sk or not idx) and seam_is_patched:
-                        retr = getattr(self._pipeline, "retriever", None)
-                        idx = idx or getattr(retr, "_index_name", None) or "idx"
-                        ep = ep or "https://unit-test"
-                        sk = sk or "sk"
-
-                    if ep and sk and idx:
-                        temp_client = factory.create_async_search_client(
-                            index_name=idx,
-                            config={"endpoint": ep, "search_key": sk},
-                        )
-                        try:
-                            logger.debug(
-                                "Provider.retrieve – factory client.search(%r)", params
-                            )
-                            tmp_raw: List[Dict[str, Any]] = []
-                            results = await temp_client.search(**params)
-                            async for row in results:
-                                tmp_raw.append(dict(row))
-                            logger.debug(
-                                "Provider.retrieve – factory path yielded %d rows",
-                                len(tmp_raw),
-                            )
-                            if tmp_raw:
-                                cleaner = getattr(
-                                    self._pipeline, "_clean_sources", None
-                                )
-                                return (
-                                    cleaner(tmp_raw) if callable(cleaner) else tmp_raw
-                                )
-                        finally:
-                            close = getattr(temp_client, "close", None)
-                            if callable(close):
-                                try:
-                                    await close()
-                                except Exception:
-                                    pass
-                    else:
-                        logger.debug(
-                            "Provider.retrieve – factory path skipped: missing config (endpoint=%r, key=%r, index=%r)",
-                            ep,
-                            bool(sk),
-                            idx,
-                        )
-            except Exception as exc:
-                logger.debug(
-                    "Provider.retrieve – factory-created client path failed.",
-                    exc_info=exc,
-                )
+        # Try factory client search (only when seam is patched)
+        factory_results = await self._try_factory_client_search(params, limit)
+        if factory_results:
+            return factory_results
 
         logger.debug("Provider.retrieve – all fallbacks empty; returning []")
         return rows
