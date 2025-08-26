@@ -103,7 +103,10 @@ async def test_kb_agent_azure_runtime_failure_falls_back_to_chroma(
             pass
 
     # Ensure local KB dir exists so local fallback path executes
-    os.makedirs("/tmp/knowledge_base", exist_ok=True)
+    import tempfile
+
+    temp_kb_dir = os.path.join(tempfile.gettempdir(), "knowledge_base")
+    os.makedirs(temp_kb_dir, exist_ok=True)
 
     with (
         # --- your existing patches ---
