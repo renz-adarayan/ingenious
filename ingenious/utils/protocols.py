@@ -206,40 +206,6 @@ def validate_protocol_compliance(obj: Any, protocol: type) -> bool:
         return False
 
 
-def get_missing_protocol_methods(obj: Any, protocol: type) -> List[str]:
-    """
-    Get list of methods missing from an object to comply with a protocol.
-
-    Args:
-        obj: Object to check
-        protocol: Protocol to validate against
-
-    Returns:
-        List of missing method names
-    """
-    missing_methods = []
-
-    # Get protocol annotations
-    if hasattr(protocol, "__annotations__"):
-        for method_name in protocol.__annotations__:
-            if not hasattr(obj, method_name):
-                missing_methods.append(method_name)
-            elif not callable(getattr(obj, method_name)):
-                missing_methods.append(f"{method_name} (not callable)")
-
-    # Get protocol methods from __dict__
-    for name, value in protocol.__dict__.items():
-        if name.startswith("_"):
-            continue
-        if callable(value) and hasattr(value, "__isabstractmethod__"):
-            if not hasattr(obj, name):
-                missing_methods.append(name)
-            elif not callable(getattr(obj, name)):
-                missing_methods.append(f"{name} (not callable)")
-
-    return missing_methods
-
-
 # Registry for protocol mappings
 PROTOCOL_REGISTRY = {
     "workflow": WorkflowProtocol,
@@ -260,8 +226,3 @@ PROTOCOL_REGISTRY = {
 def get_protocol_by_name(name: str) -> Optional[type]:
     """Get a protocol by its registered name."""
     return PROTOCOL_REGISTRY.get(name.lower())
-
-
-def register_protocol(name: str, protocol: type) -> None:
-    """Register a new protocol with a name."""
-    PROTOCOL_REGISTRY[name.lower()] = protocol  # type: ignore
