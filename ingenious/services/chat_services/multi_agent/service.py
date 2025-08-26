@@ -598,7 +598,7 @@ class IConversationFlow(ABC):
                 operation="template_file_lookup",
             )
             return ""
-        env = Environment()
+        env = Environment(autoescape=True)
         template = env.from_string(content)
         return template.render()  # type: ignore
 

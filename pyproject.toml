@@ -63,6 +63,7 @@ Issues = "https://github.com/Insight-Services-APAC/ingenious/issues"
 
 [dependency-groups]
 dev = [
+  "bandit>=1.8.6",
   "httpx>=0.28.1",
   "jsonpickle>=4.1.1",
   "mkdocs>=1.6.1",
