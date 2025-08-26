@@ -1,0 +1,79 @@
+/* Custom styles for Insight Ingenious documentation */
+
+:root {
+  /* Insight brand colors */
+  --md-primary-fg-color: #AE0A46; /* Shiraz - Insight's primary red */
+  --md-primary-fg-color--light: #D40E8C; /* Lighter pink variant */
+  --md-primary-fg-color--dark: #721357; /* Darker burgundy variant */
+  --md-accent-fg-color: #3E332D; /* Taupe - Insight's brand brown */
+  --md-default-bg-color: #F7F6F5; /* Desert Storm - Insight's light background */
+  --md-default-fg-color: #222222; /* Mine Shaft - Insight's dark text color */
+}
+
+/* Custom color scheme for Insight branding */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #AE0A46;
+  --md-primary-fg-color--light: #D40E8C;
+  --md-primary-fg-color--dark: #721357;
+  --md-accent-fg-color: #3E332D;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #D40E8C;
+  --md-primary-fg-color--light: #AE0A46;
+  --md-primary-fg-color--dark: #721357;
+  --md-accent-fg-color: #F7F6F5;
+}
+
+/* Custom grid cards styling */
+.grid.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.grid.cards > * {
+  padding: 1.5rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.5rem;
+  transition: all 0.2s ease-in-out;
+}
+
+.grid.cards > *:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  border-color: var(--md-primary-fg-color--light);
+}
+
+/* Mermaid diagram styling */
+.mermaid {
+  text-align: center;
+  margin: 1em 0;
+}
+
+/* Code block enhancements */
+.highlight .filename {
+  background: var(--md-code-bg-color);
+  color: var(--md-code-fg-color);
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem 0.25rem 0 0;
+  font-size: 0.8rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-bottom: none;
+}
+
+/* Admonition customizations */
+.md-typeset .admonition.tip {
+  border-left-color: #00BCD4;
+}
+
+.md-typeset .admonition.tip > .admonition-title {
+  background-color: rgba(0, 188, 212, 0.1);
+  border-left-color: #00BCD4;
+}
+
+/* Navigation enhancements */
+.md-nav__item--active > .md-nav__link {
+  color: var(--md-primary-fg-color);
+  font-weight: 500;
+}
