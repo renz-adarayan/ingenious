@@ -8,7 +8,7 @@ Used Radon to identify and refactor high-complexity code hotspots in the Ingenio
 ### Worst Complexity Offenders (E-D grades)
 1. **LLMUsageTracker.emit** - Grade E (CC=33) → **REFACTORED to Grade B (CC=6)** ✅
 2. **multi_agent_chat_service.get_chat_response** - Grade E (CC=31) → **REFACTORED to Grade A (CC=1)** ✅
-3. **ConversationFlow._search_knowledge_base** - Grade E (CC=40)
+3. **ConversationFlow._search_knowledge_base** - Grade E (CC=40) → **REFACTORED to Grade B (CC=7)** ✅
 4. **ValidateCommand._validate_environment_variables** - Grade D (CC=29)
 5. **ValidateCommand._validate_configuration_files** - Grade D (CC=27)
 
@@ -59,13 +59,35 @@ Used Radon to identify and refactor high-complexity code hotspots in the Ingenio
 
 **Test Results**: All 3 TestChatService tests passing ✅
 
+### 3. ConversationFlow._search_knowledge_base Method
+**File**: `ingenious/services/chat_services/multi_agent/conversation_flows/knowledge_base_agent/knowledge_base_agent.py`
+
+**Changes**:
+- Extracted 14 focused helper methods from monolithic _search_knowledge_base method
+- Reduced cyclomatic complexity from 40 to 7 (E → B grade)
+- Improved separation of concerns and readability
+
+**New Helper Methods**:
+- `_handle_prefer_local_policy()` - Handle prefer_local policy with fallback
+- `_should_attempt_azure()` - Determine if Azure search should be attempted
+- `_try_azure_search()` - Orchestrate Azure search with error handling
+- `_execute_azure_search_with_provider()` - Execute search with provider
+- `_format_azure_results()` - Format Azure search results
+- `_format_single_chunk()` - Format individual search result
+- `_should_fallback_from_azure()` - Check fallback conditions
+- `_handle_azure_import_error()` - Handle import errors
+- `_handle_azure_preflight_error()` - Handle preflight errors
+- `_handle_azure_general_error()` - Handle general errors
+- `_close_azure_provider()` - Safely close provider
+- `_ensure_kb_directory()` - Ensure local KB directory exists
+- `_handle_search_fallback()` - Handle fallback scenarios
+
+**Test Results**: All 61 knowledge base tests passing ✅
+
 ## Recommendations for Next Steps
 
 ### High Priority (E-grade complexity)
-1. **Refactor ConversationFlow._search_knowledge_base**
-   - Split search logic from formatting
-   - Extract result processing
-   - Simplify nested conditionals
+✅ ~~1. **Refactor ConversationFlow._search_knowledge_base**~~ (Completed)
 
 ### Medium Priority (D-grade complexity)
 - ValidateCommand methods need decomposition
@@ -76,11 +98,14 @@ Used Radon to identify and refactor high-complexity code hotspots in the Ingenio
 - Profile parsing methods
 
 ## Impact
-- **Code Quality**: Reduced complexity from E to B grade for logging component, E to A grade for chat service
+- **Code Quality**: Reduced complexity from E to B/A grades for all three refactored methods
 - **Maintainability**: Significantly improved code readability and testability
-- **Technical Debt**: Reduced future maintenance burden for two critical components
-- **Testing**: All existing tests continue to pass
-- **Metrics**: 97% complexity reduction for get_chat_response (31→1), 82% for emit (33→6)
+- **Technical Debt**: Reduced future maintenance burden for three critical components
+- **Testing**: All existing tests continue to pass (10 + 3 + 61 = 74 tests)
+- **Metrics**:
+  - 97% complexity reduction for get_chat_response (31→1)
+  - 82% complexity reduction for emit (33→6)
+  - 82.5% complexity reduction for _search_knowledge_base (40→7)
 
 ## Git Commits
 ```bash
