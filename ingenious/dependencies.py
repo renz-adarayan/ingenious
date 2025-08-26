@@ -21,7 +21,6 @@ from typing_extensions import Annotated
 from ingenious.auth.jwt import get_username_from_token
 from ingenious.common.enums import AuthenticationMethod
 from ingenious.config.config import get_config as _get_config
-from ingenious.config.profile import Profiles
 from ingenious.config.settings import IngeniousSettings
 from ingenious.core.structured_logging import get_logger
 from ingenious.db.chat_history_repository import ChatHistoryRepository
@@ -50,11 +49,6 @@ bearer_security = HTTPBearer()
 def get_config() -> IngeniousSettings:
     """Get config dynamically to ensure environment variables are loaded"""
     return _get_config()
-
-
-def get_profile() -> Profiles:
-    """Get profile dynamically to ensure environment variables are loaded"""
-    return Profiles(os.getenv("INGENIOUS_PROFILE_PATH", ""))
 
 
 def get_openai_service() -> OpenAIService:

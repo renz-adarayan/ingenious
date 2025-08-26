@@ -48,11 +48,15 @@ HAS_COSMOS: bool = _has_module("azure.cosmos")
 # Patchable builder symbols (initialized to None; tests can patch these directly).
 # --------------------------------------------------------------------------------------
 
-AzureOpenAIClientBuilder = NoneAzureOpenAIChatCompletionClientBuilder = (
-    NoneBlobServiceClientBuilder
-) = NoneBlobClientBuilder = NoneAzureSearchClientBuilder = NoneAzureSqlClientBuilder = (
-    NoneAzureSqlClientBuilderWithAuth
-) = NoneAzureSearchAsyncClientBuilder = NoneAsyncAzureOpenAIClientBuilder = None
+AzureOpenAIClientBuilder = None
+AzureOpenAIChatCompletionClientBuilder = None
+BlobServiceClientBuilder = None
+BlobClientBuilder = None
+AzureSearchClientBuilder = None
+AzureSqlClientBuilder = None
+AzureSqlClientBuilderWithAuth = None
+AzureSearchAsyncClientBuilder = None
+AsyncAzureOpenAIClientBuilder = None
 __all__ = [
     "AzureClientFactory",
     "HAS_COSMOS",

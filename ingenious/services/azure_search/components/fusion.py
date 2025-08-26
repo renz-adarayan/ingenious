@@ -210,6 +210,296 @@ Question: {query}
             v = 0.0 if v < 0.0 else (1.0 if v > 1.0 else v)
             r["_normalized_score"] = v
 
+    def _safe_float(self, x: Any) -> float:
+        """Safely convert a value to a float, returning 0.0 on failure."""
+        try:
+            return float(x)
+        except (ValueError, TypeError):
+            return 0.0
+
+    def _build_score_lookups(
+        self,
+        id_field: str,
+        lexical_results: list[dict[str, Any]],
+        vector_results: list[dict[str, Any]],
+    ) -> dict[str, dict[str, Any]]:
+        """Build normalized and raw score lookup dictionaries.
+
+        Args:
+            id_field: The document ID field name.
+            lexical_results: Documents from lexical search.
+            vector_results: Documents from vector search.
+
+        Returns:
+            A dictionary containing four lookups: lex_norm, vec_norm, lex_raw, vec_raw.
+        """
+        # Build normalized lookups
+        lex_norm_lookup: dict[str, float] = {
+            cast(str, doc_id): self._safe_float(r.get("_normalized_score"))
+            for r in lexical_results
+            if (doc_id := r.get(id_field)) is not None
+        }
+        vec_norm_lookup: dict[str, float] = {
+            cast(str, doc_id): self._safe_float(r.get("_normalized_score"))
+            for r in vector_results
+            if (doc_id := r.get(id_field)) is not None
+        }
+
+        # Raw lookups for diagnostics
+        lex_raw_lookup: dict[str, Any | None] = {
+            cast(str, doc_id): r.get("_retrieval_score")
+            for r in lexical_results
+            if (doc_id := r.get(id_field))
+        }
+        vec_raw_lookup: dict[str, Any | None] = {
+            cast(str, doc_id): r.get("_retrieval_score")
+            for r in vector_results
+            if (doc_id := r.get(id_field))
+        }
+
+        return {
+            "lex_norm": lex_norm_lookup,
+            "vec_norm": vec_norm_lookup,
+            "lex_raw": lex_raw_lookup,
+            "vec_raw": vec_raw_lookup,
+        }
+
+    def _combine_results(
+        self,
+        lexical_results: list[dict[str, Any]],
+        vector_results: list[dict[str, Any]],
+        id_field: str,
+        alpha: float,
+        one_minus_alpha: float,
+        lex_norm_lookup: dict[str, float],
+        vec_norm_lookup: dict[str, float],
+        lex_raw_lookup: dict[str, Any | None],
+        vec_raw_lookup: dict[str, Any | None],
+        diag: bool,
+    ) -> dict[str, dict[str, Any]]:
+        """Combine lexical and vector results using weighted fusion.
+
+        Args:
+            lexical_results: Documents from lexical search.
+            vector_results: Documents from vector search.
+            id_field: The document ID field name.
+            alpha: The vector weight.
+            one_minus_alpha: The lexical weight.
+            lex_norm_lookup: Normalized lexical scores.
+            vec_norm_lookup: Normalized vector scores.
+            lex_raw_lookup: Raw lexical scores.
+            vec_raw_lookup: Raw vector scores.
+            diag: Whether to include diagnostic information.
+
+        Returns:
+            A dictionary mapping document IDs to fused results.
+        """
+        fused_results: dict[str, dict[str, Any]] = {}
+
+        # Process lexical results
+        for result in lexical_results:
+            self._process_lexical_result(
+                result,
+                id_field,
+                alpha,
+                one_minus_alpha,
+                lex_norm_lookup,
+                vec_norm_lookup,
+                lex_raw_lookup,
+                vec_raw_lookup,
+                diag,
+                fused_results,
+            )
+
+        # Process vector results
+        for result in vector_results:
+            self._process_vector_result(
+                result,
+                id_field,
+                alpha,
+                one_minus_alpha,
+                lex_norm_lookup,
+                vec_norm_lookup,
+                lex_raw_lookup,
+                vec_raw_lookup,
+                diag,
+                fused_results,
+            )
+
+        return fused_results
+
+    def _process_lexical_result(
+        self,
+        result: dict[str, Any],
+        id_field: str,
+        alpha: float,
+        one_minus_alpha: float,
+        lex_norm_lookup: dict[str, float],
+        vec_norm_lookup: dict[str, float],
+        lex_raw_lookup: dict[str, Any | None],
+        vec_raw_lookup: dict[str, Any | None],
+        diag: bool,
+        fused_results: dict[str, dict[str, Any]],
+    ) -> str | None:
+        """Process a single lexical result for fusion."""
+        doc_id_any = result.get(id_field)
+        if not doc_id_any:
+            return None
+        doc_id = cast(str, doc_id_any)
+
+        bm25_norm = lex_norm_lookup.get(doc_id, 0.0)
+        vec_norm = vec_norm_lookup.get(doc_id, 0.0)
+
+        bm25_component = one_minus_alpha * bm25_norm
+        vector_component = alpha * vec_norm
+
+        fused = bm25_component + vector_component
+        result["_fused_score"] = fused
+
+        # Preserve raw scores for display
+        result["_bm25_score_raw"] = lex_raw_lookup.get(doc_id)
+        result["_vector_score_raw"] = vec_raw_lookup.get(doc_id)  # may be None
+
+        if diag:
+            result["_dat_alpha"] = alpha
+            result["_dat_weight_vector"] = alpha
+            result["_dat_weight_bm25"] = one_minus_alpha
+            result["_bm25_norm"] = bm25_norm
+            result["_vector_norm"] = vec_norm
+            result["_bm25_component"] = bm25_component
+            result["_vector_component"] = vector_component
+
+        fused_results[doc_id] = result
+        return doc_id
+
+    def _process_vector_result(
+        self,
+        result: dict[str, Any],
+        id_field: str,
+        alpha: float,
+        one_minus_alpha: float,
+        lex_norm_lookup: dict[str, float],
+        vec_norm_lookup: dict[str, float],
+        lex_raw_lookup: dict[str, Any | None],
+        vec_raw_lookup: dict[str, Any | None],
+        diag: bool,
+        fused_results: dict[str, dict[str, Any]],
+    ) -> None:
+        """Process a single vector result for fusion."""
+        doc_id_any = result.get(id_field)
+        if not doc_id_any:
+            return
+        doc_id = cast(str, doc_id_any)
+
+        vec_norm = vec_norm_lookup.get(doc_id, 0.0)
+        bm25_norm = lex_norm_lookup.get(doc_id, 0.0)
+
+        bm25_component = one_minus_alpha * bm25_norm
+        vector_component = alpha * vec_norm
+        fused = bm25_component + vector_component
+
+        if doc_id in fused_results:
+            existing = fused_results[doc_id]
+            existing["_fused_score"] = fused  # recompute with both components
+
+            # update raw scores for overlap docs
+            existing["_vector_score_raw"] = vec_raw_lookup.get(doc_id)
+
+            if diag:
+                existing["_bm25_norm"] = bm25_norm
+                existing["_vector_norm"] = vec_norm
+                existing["_bm25_component"] = bm25_component
+                existing["_vector_component"] = vector_component
+
+            existing["_retrieval_type"] = f"hybrid_dat_alpha_{alpha:.1f}"
+        else:
+            result["_fused_score"] = fused
+
+            # Preserve raw scores for display
+            result["_bm25_score_raw"] = lex_raw_lookup.get(doc_id)  # may be None
+            result["_vector_score_raw"] = vec_raw_lookup.get(doc_id)
+
+            if diag:
+                result["_dat_alpha"] = alpha
+                result["_dat_weight_vector"] = alpha
+                result["_dat_weight_bm25"] = one_minus_alpha
+                result["_bm25_norm"] = bm25_norm
+                result["_vector_norm"] = vec_norm
+                result["_bm25_component"] = bm25_component
+                result["_vector_component"] = vector_component
+
+            fused_results[doc_id] = result
+
+    def _sort_fused_results(
+        self,
+        fused_results: dict[str, dict[str, Any]],
+        id_field: str,
+        lex_norm_lookup: dict[str, float],
+        vec_norm_lookup: dict[str, float],
+    ) -> list[dict[str, Any]]:
+        """Sort fused results with tiebreakers.
+
+        Args:
+            fused_results: Dictionary of fused results.
+            id_field: The document ID field name.
+            lex_norm_lookup: Normalized lexical scores.
+            vec_norm_lookup: Normalized vector scores.
+
+        Returns:
+            Sorted list of fused documents.
+        """
+        overlap_ids = set(lex_norm_lookup.keys()) & set(vec_norm_lookup.keys())
+
+        def _sort_key(x: dict[str, Any]) -> tuple[float, int, float, str]:
+            """Define the sorting logic for the final ranked list."""
+            doc_id: str = str(x.get(id_field) or "")
+            fused = self._safe_float(x.get("_fused_score"))
+            overlap = 1 if doc_id in overlap_ids else 0
+            max_single = max(
+                lex_norm_lookup.get(doc_id, 0.0), vec_norm_lookup.get(doc_id, 0.0)
+            )
+            return (fused, overlap, max_single, doc_id)
+
+        sorted_fused = sorted(fused_results.values(), key=_sort_key, reverse=True)
+
+        # Set _final_score only if absent (do not trample later stages)
+        for r in sorted_fused:
+            if r.get("_final_score") is None:
+                r["_final_score"] = r.get("_fused_score", 0.0)
+
+        return sorted_fused
+
+    async def _compute_alpha(
+        self,
+        query: str,
+        lexical_results: list[dict[str, Any]],
+        vector_results: list[dict[str, Any]],
+    ) -> float:
+        """Compute the fusion weight (alpha) based on available results.
+
+        Args:
+            query: The user's search query.
+            lexical_results: Documents from lexical search.
+            vector_results: Documents from vector search.
+
+        Returns:
+            The computed alpha value.
+        """
+        if lexical_results and vector_results:
+            qkey = (query or "").strip().lower()
+            if qkey in self._alpha_cache:
+                return self._alpha_cache[qkey]
+            else:
+                alpha = await self._perform_dat(
+                    query, lexical_results[0], vector_results[0]
+                )
+                self._alpha_cache[qkey] = alpha
+                return alpha
+        elif vector_results and not lexical_results:
+            return 1.0
+        else:  # lexical_results and not vector_results
+            return 0.0
+
     async def fuse(
         self,
         query: str,
@@ -232,180 +522,48 @@ Question: {query}
         Returns:
             A single list of documents, sorted by the new fused score.
         """
-        # ─────────────────────────────
-        # 0) Fast exits
-        # ─────────────────────────────
+        # Fast exit for empty results
         if not lexical_results and not vector_results:
             return []
 
-        # ─────────────────────────────
-        # 1) Compute α
-        #    - Use DAT only if both sides have a Top-1
-        #    - Otherwise use consistent defaults:
-        #        * only vector → α = 1.0
-        #        * only lexical → α = 0.0
-        # ─────────────────────────────
-        alpha: float
-        if lexical_results and vector_results:
-            qkey = (query or "").strip().lower()
-            if qkey in self._alpha_cache:
-                alpha = self._alpha_cache[qkey]
-            else:
-                alpha = await self._perform_dat(
-                    query, lexical_results[0], vector_results[0]
-                )
-                self._alpha_cache[qkey] = alpha
-        elif vector_results and not lexical_results:
-            alpha = 1.0
-        else:  # lexical_results and not vector_results
-            alpha = 0.0
-
+        # Compute fusion weight (alpha)
+        alpha = await self._compute_alpha(query, lexical_results, vector_results)
         one_minus_alpha = round(1.0 - alpha, 1)
 
-        # ─────────────────────────────
-        # 2) Per-method Min-Max normalization (no rank fallback)
-        # ─────────────────────────────
+        # Normalize scores for each result set
         self._normalize_scores(lexical_results)
         self._normalize_scores(vector_results)
 
         id_field: str = self._config.id_field
         diag: bool = bool(getattr(self._config, "expose_retrieval_diagnostics", False))
 
-        def _safe_float(x: Any) -> float:
-            """Safely convert a value to a float, returning 0.0 on failure."""
-            try:
-                # The float() constructor can raise TypeError or ValueError
-                return float(x)
-            except (ValueError, TypeError):
-                return 0.0
+        # Build score lookups
+        lookup_data = self._build_score_lookups(
+            id_field, lexical_results, vector_results
+        )
+        lex_norm_lookup = lookup_data["lex_norm"]
+        vec_norm_lookup = lookup_data["vec_norm"]
+        lex_raw_lookup = lookup_data["lex_raw"]
+        vec_raw_lookup = lookup_data["vec_raw"]
 
-        # Build normalized lookups
-        lex_norm_lookup: dict[str, float] = {
-            cast(str, doc_id): _safe_float(r.get("_normalized_score"))
-            for r in lexical_results
-            if (doc_id := r.get(id_field)) is not None
-        }
-        vec_norm_lookup: dict[str, float] = {
-            cast(str, doc_id): _safe_float(r.get("_normalized_score"))
-            for r in vector_results
-            if (doc_id := r.get(id_field)) is not None
-        }
+        # Perform convex combination (core DAT)
+        fused_results = self._combine_results(
+            lexical_results,
+            vector_results,
+            id_field,
+            alpha,
+            one_minus_alpha,
+            lex_norm_lookup,
+            vec_norm_lookup,
+            lex_raw_lookup,
+            vec_raw_lookup,
+            diag,
+        )
 
-        # Raw lookups for diagnostics
-        lex_raw_lookup: dict[str, Any | None] = {
-            cast(str, doc_id): r.get("_retrieval_score")
-            for r in lexical_results
-            if (doc_id := r.get(id_field))
-        }
-        vec_raw_lookup: dict[str, Any | None] = {
-            cast(str, doc_id): r.get("_retrieval_score")
-            for r in vector_results
-            if (doc_id := r.get(id_field))
-        }
-
-        # ─────────────────────────────
-        # 3) Convex combination (core DAT)
-        # ─────────────────────────────
-        fused_results: dict[str, dict[str, Any]] = {}
-
-        # Process lexical side first: (1 − α) · S_BM25_norm
-        for result in lexical_results:
-            doc_id_any = result.get(id_field)
-            if not doc_id_any:
-                continue
-            doc_id = cast(str, doc_id_any)
-
-            bm25_norm = lex_norm_lookup.get(doc_id, 0.0)
-            vec_norm = vec_norm_lookup.get(doc_id, 0.0)
-
-            bm25_component = one_minus_alpha * bm25_norm
-            vector_component = alpha * vec_norm
-
-            fused = bm25_component + vector_component
-            result["_fused_score"] = fused
-
-            # Preserve raw scores for display
-            result["_bm25_score_raw"] = lex_raw_lookup.get(doc_id)
-            result["_vector_score_raw"] = vec_raw_lookup.get(doc_id)  # may be None
-
-            if diag:
-                result["_dat_alpha"] = alpha
-                result["_dat_weight_vector"] = alpha
-                result["_dat_weight_bm25"] = one_minus_alpha
-                result["_bm25_norm"] = bm25_norm
-                result["_vector_norm"] = vec_norm
-                result["_bm25_component"] = bm25_component
-                result["_vector_component"] = vector_component
-
-            fused_results[doc_id] = result
-
-        # Process vector side: α · S_dense_norm (and add if missing or merge if overlap)
-        for result in vector_results:
-            doc_id_any = result.get(id_field)
-            if not doc_id_any:
-                continue
-            doc_id = cast(str, doc_id_any)
-
-            vec_norm = vec_norm_lookup.get(doc_id, 0.0)
-            bm25_norm = lex_norm_lookup.get(doc_id, 0.0)
-
-            bm25_component = one_minus_alpha * bm25_norm
-            vector_component = alpha * vec_norm
-            fused = bm25_component + vector_component
-
-            if doc_id in fused_results:
-                existing = fused_results[doc_id]
-                existing["_fused_score"] = fused  # recompute with both components
-
-                # update raw scores for overlap docs
-                existing["_vector_score_raw"] = vec_raw_lookup.get(doc_id)
-
-                if diag:
-                    existing["_bm25_norm"] = bm25_norm
-                    existing["_vector_norm"] = vec_norm
-                    existing["_bm25_component"] = bm25_component
-                    existing["_vector_component"] = vector_component
-
-                existing["_retrieval_type"] = f"hybrid_dat_alpha_{alpha:.1f}"
-            else:
-                result["_fused_score"] = fused
-
-                # Preserve raw scores for display
-                result["_bm25_score_raw"] = lex_raw_lookup.get(doc_id)  # may be None
-                result["_vector_score_raw"] = vec_raw_lookup.get(doc_id)
-
-                if diag:
-                    result["_dat_alpha"] = alpha
-                    result["_dat_weight_vector"] = alpha
-                    result["_dat_weight_bm25"] = one_minus_alpha
-                    result["_bm25_norm"] = bm25_norm
-                    result["_vector_norm"] = vec_norm
-                    result["_bm25_component"] = bm25_component
-                    result["_vector_component"] = vector_component
-
-                fused_results[doc_id] = result
-
-        # ─────────────────────────────
-        # 4) Stable sort + tiebreakers
-        # ─────────────────────────────
-        overlap_ids = set(lex_norm_lookup.keys()) & set(vec_norm_lookup.keys())
-
-        def _sort_key(x: dict[str, Any]) -> tuple[float, int, float, str]:
-            """Define the sorting logic for the final ranked list."""
-            doc_id: str = str(x.get(id_field) or "")
-            fused = _safe_float(x.get("_fused_score"))
-            overlap = 1 if doc_id in overlap_ids else 0
-            max_single = max(
-                lex_norm_lookup.get(doc_id, 0.0), vec_norm_lookup.get(doc_id, 0.0)
-            )
-            return (fused, overlap, max_single, doc_id)
-
-        sorted_fused = sorted(fused_results.values(), key=_sort_key, reverse=True)
-
-        # Set _final_score only if absent (do not trample later stages)
-        for r in sorted_fused:
-            if r.get("_final_score") is None:
-                r["_final_score"] = r.get("_fused_score", 0.0)
+        # Sort results with tiebreakers
+        sorted_fused = self._sort_fused_results(
+            fused_results, id_field, lex_norm_lookup, vec_norm_lookup
+        )
 
         logger.info("DAT Fusion complete. docs=%d alpha=%.1f", len(sorted_fused), alpha)
         return sorted_fused

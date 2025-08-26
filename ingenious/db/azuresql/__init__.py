@@ -148,32 +148,6 @@ class azuresql_ChatHistoryRepository(BaseSQLRepository):
         # In a full implementation, you'd join with threads table and return proper thread data
         return []
 
-    async def get_thread(self, thread_id: str) -> List[IChatHistoryRepository.Thread]:
-        cursor = self.connection.cursor()
-        cursor.execute(
-            """
-            SELECT id, createdAt, name, userId, userIdentifier, tags, metadata
-            FROM threads
-            WHERE id = ?
-        """,
-            (thread_id,),
-        )
-        rows = cursor.fetchall()
-        cursor.close()
-
-        return [
-            IChatHistoryRepository.Thread(
-                id=row[0],
-                createdAt=row[1],
-                name=row[2],
-                userId=row[3],
-                userIdentifier=row[4],
-                tags=row[5],
-                metadata=row[6],
-            )
-            for row in rows
-        ]
-
     async def add_step(self, step_dict: IChatHistoryRepository.StepDict) -> None:
         logger.info(
             "Creating step in database",

@@ -176,6 +176,7 @@ class SQL_ToolFunctions:
             # Validate table name to prevent SQL injection
             if not table_name.replace("_", "").replace("-", "").isalnum():
                 raise ValueError(f"Invalid table name: {table_name}")
+            # nosec B608: table_name is validated above to be alphanumeric
             result = test_db.execute_sql(f"""SELECT * FROM "{table_name}" LIMIT 1""")
             column_names = [key for key in result[0]]
             return table_name, column_names

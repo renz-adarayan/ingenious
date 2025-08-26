@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from typing import Any, Callable, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional, Union
 
 from ingenious.common.enums import AuthenticationMethod
+
+if TYPE_CHECKING:
+    pass
 
 
 def _get(obj: Any, *names: str) -> Optional[Any]:
@@ -34,6 +37,17 @@ class AzureAuthConfig:
       - openai_key / openai_endpoint aliases
       - api_version: Optional[str]
     """
+
+    # Declare instance attributes for mypy
+    authentication_method: AuthenticationMethod
+    api_key: Optional[str]
+    client_id: Optional[str]
+    client_secret: Optional[str]
+    tenant_id: Optional[str]
+    endpoint: Optional[str]
+    openai_key: Optional[str]
+    openai_endpoint: Optional[str]
+    api_version: Optional[str]
 
     def __init__(
         self,
@@ -162,6 +176,11 @@ class AzureAuthConfig:
                 get_bearer_token_provider as get_sync_bearer_token_provider,
             )
 
+            cred: Union[
+                SyncClientSecretCredential,
+                SyncManagedIdentityCredential,
+                SyncDefaultAzureCredential,
+            ]
             if (
                 self.authentication_method == AuthenticationMethod.CLIENT_ID_AND_SECRET
                 and self.tenant_id
@@ -201,6 +220,11 @@ class AzureAuthConfig:
                 get_bearer_token_provider as get_aio_bearer_token_provider,
             )
 
+            aio_cred: Union[
+                AioClientSecretCredential,
+                AioManagedIdentityCredential,
+                AioDefaultAzureCredential,
+            ]
             if (
                 self.authentication_method == AuthenticationMethod.CLIENT_ID_AND_SECRET
                 and self.tenant_id
@@ -242,6 +266,6 @@ class AzureAuthConfig:
                     return loop.run_until_complete(token_or_coro)
                 except RuntimeError:
                     return asyncio.run(token_or_coro)
-            return token_or_coro
+            return token_or_coro  # type: ignore[unreachable]
 
         return _sync_provider

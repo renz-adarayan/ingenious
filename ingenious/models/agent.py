@@ -365,84 +365,144 @@ class LLMUsageTracker(logging.Handler):
             agent = self._agents.get_agent_by_name(agent_chat.target_agent_name)
             await agent.log(agent_chat, target_queue)
 
+    def _extract_agent_identifiers(
+        self, agent_id: Optional[str]
+    ) -> Optional[tuple[str, str]]:
+        """Extract agent name and source name from agent_id."""
+        if not agent_id:
+            return None
+        parts = agent_id.split("/")
+        if len(parts) >= 2:
+            return parts[0], parts[1]
+        return None
+
+    def _find_agent(self, agent_name: str) -> Optional[Any]:
+        """Find agent by name, handling both Agents object and list."""
+        if hasattr(self._agents, "get_agent_by_name"):
+            try:
+                return self._agents.get_agent_by_name(agent_name)
+            except ValueError:
+                pass
+        return None
+
+    def _extract_response_content(
+        self, choices: Optional[List[Any]]
+    ) -> tuple[str, bool]:
+        """Extract response content and determine if chat should be added."""
+        response = ""
+        add_chat = True
+
+        if not choices:
+            return response, add_chat
+
+        for choice in choices:
+            if choice.message:
+                if choice.message.content:
+                    response += choice.message.content + "\n\n"
+                if choice.message.tool_calls:
+                    add_chat = False
+
+        return response, add_chat
+
+    def _extract_system_messages(self, messages: Optional[List[Any]]) -> str:
+        """Extract and join system messages."""
+        if not messages:
+            return ""
+        return "\n\n".join(
+            r.content for r in messages if r and r.role == "system" and r.content
+        )
+
+    def _extract_user_messages(self, messages: Optional[List[Any]]) -> str:
+        """Extract and join user messages."""
+        if not messages:
+            return ""
+        return "\n\n".join(
+            r.content for r in messages if r and r.role == "user" and r.content
+        )
+
+    def _append_tool_messages(
+        self, user_input: str, messages: Optional[List[Any]]
+    ) -> str:
+        """Append tool messages to user input."""
+        if not messages:
+            return user_input
+
+        tool_messages = [m for m in messages if m and m.role == "tool"]
+        if not tool_messages:
+            return user_input
+
+        result = user_input + "\n\n---\n\n# Tool Messages\n\n"
+        for msg in tool_messages:
+            if msg.content:
+                result += f"{msg.content}\n\n"
+        return result
+
+    def _update_agent_chat(
+        self,
+        agent: Any,
+        source_name: str,
+        response: str,
+        system_input: str,
+        user_input: str,
+        event: LLMCallEvent,
+        add_chat: bool,
+    ) -> None:
+        """Update agent-specific chat data."""
+        chat = agent.get_agent_chat_by_source(source=source_name)
+        chat.chat_response = Response(
+            chat_message=TextMessage(content=response, source=source_name)
+        )
+        chat.prompt_tokens = event.prompt_tokens
+        chat.completion_tokens = event.completion_tokens
+        chat.system_prompt = system_input
+        chat.user_message = user_input
+        chat.end_time = datetime.now().timestamp()
+        if add_chat:
+            self._queue.append(chat)
+
     def emit(self, record: logging.LogRecord) -> None:
         """Emit the log record."""
-
         try:
-            add_chat = True
-            if isinstance(record.msg, LLMCallEvent):
-                event: LLMCallEvent = record.msg
-                kwargs: LLMEventKwargs = LLMEventKwargs.model_validate(event.kwargs)
+            if not isinstance(record.msg, LLMCallEvent):
+                return
 
-                if kwargs.agent_id:
-                    agent_name = kwargs.agent_id.split("/")[0]
-                    source_name = kwargs.agent_id.split("/")[1]
-                else:
-                    return
+            event: LLMCallEvent = record.msg
+            kwargs: LLMEventKwargs = LLMEventKwargs.model_validate(event.kwargs)
 
-                # Handle both Agents object and list
-                agent = None
-                if hasattr(self._agents, "get_agent_by_name"):
-                    try:
-                        agent = self._agents.get_agent_by_name(agent_name)
-                    except ValueError:
-                        # Agent not found in the list
-                        pass
-                response = ""
-                system_input = ""
-                user_input = ""
-                if kwargs.response and kwargs.response.choices:
-                    for r in kwargs.response.choices:
-                        content = r.message.content if r.message else None
-                        if content:
-                            response += content + "\n\n"
-                        if r.message and r.message.tool_calls:
-                            for tool_call in r.message.tool_calls:
-                                add_chat = False
+            # Extract agent identifiers
+            identifiers = self._extract_agent_identifiers(kwargs.agent_id)
+            if not identifiers:
+                return
+            agent_name, source_name = identifiers
 
-                        system_input = "\n\n".join(
-                            [
-                                r.content
-                                for r in (kwargs.messages or [])
-                                if r and r.role == "system" and r.content
-                            ]
-                        )
-                        user_input = "\n\n".join(
-                            [
-                                r.content
-                                for r in (kwargs.messages or [])
-                                if r and r.role == "user" and r.content
-                            ]
-                        )
+            # Find agent
+            agent = self._find_agent(agent_name)
 
-                        # Get all messages with role 'tool'
-                        tool_messages = [
-                            m for m in (kwargs.messages or []) if m and m.role == "tool"
-                        ]
-                        if tool_messages:
-                            user_input += "\n\n---\n\n"
-                            user_input += "# Tool Messages\n\n"
-                            for m in tool_messages:
-                                if m.content:
-                                    user_input += f"{m.content}\n\n"
+            # Extract response and check if chat should be added
+            response, add_chat = self._extract_response_content(
+                kwargs.response.choices if kwargs.response else None
+            )
 
-                # Update token counts regardless of agent availability
-                self._prompt_tokens += event.prompt_tokens
-                self._completion_tokens += event.completion_tokens
+            # Extract message inputs
+            system_input = self._extract_system_messages(kwargs.messages)
+            user_input = self._extract_user_messages(kwargs.messages)
+            user_input = self._append_tool_messages(user_input, kwargs.messages)
 
-                # Only update agent-specific data if agent is available
-                if agent:
-                    chat = agent.get_agent_chat_by_source(source=source_name)
-                    chat.chat_response = Response(
-                        chat_message=TextMessage(content=response, source=source_name)
-                    )
-                    chat.prompt_tokens = event.prompt_tokens
-                    chat.completion_tokens = event.completion_tokens
-                    chat.system_prompt = system_input
-                    chat.user_message = user_input
-                    chat.end_time = datetime.now().timestamp()
-                    if add_chat:
-                        self._queue.append(chat)
+            # Update token counts
+            self._prompt_tokens += event.prompt_tokens
+            self._completion_tokens += event.completion_tokens
+
+            # Update agent-specific data if available
+            if agent:
+                self._update_agent_chat(
+                    agent,
+                    source_name,
+                    response,
+                    system_input,
+                    user_input,
+                    event,
+                    add_chat,
+                )
 
         except Exception as e:
             print(f"Failed to emit log record :{e}")

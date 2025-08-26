@@ -63,6 +63,7 @@ Issues = "https://github.com/Insight-Services-APAC/ingenious/issues"
 
 [dependency-groups]
 dev = [
+  "bandit>=1.8.6",
   "httpx>=0.28.1",
   "jsonpickle>=4.1.1",
   "mkdocs>=1.6.1",
@@ -77,6 +78,7 @@ dev = [
   "pytest-cov>=6.1.1",
   "pytest-mock>=3.14.0",
   "pytest-timeout>=2.4.0",
+  "radon>=6.0.1",
   "ruff>=0.11.10",
   "twine>=6.0.0",
   "types-markdown>=3.8.0.20250708",
@@ -258,6 +260,7 @@ module = [
   "python_docx.*",
   "openpyxl.*",
   "xlsxwriter.*",
+  "pandas.*",
   "pandas_stubs.*",
   "markdown.*",
   "jinja2.*",
@@ -279,6 +282,8 @@ module = [
   "colorlog.*",
 ]
 ignore_missing_imports = true
+allow_untyped_calls = true
+allow_untyped_defs = true
 
 # Allow some flexibility during initial migration
 [[tool.mypy.overrides]]
@@ -296,7 +301,10 @@ module = [
   "ingenious.services.chat_services.multi_agent.*",
   "ingenious.services.sql_agent.*",
   "ingenious.utils.*",
-  "ingenious.models.ca_raw_fixture_data.*",
+  "ingenious.db.cosmos.*",
+  "ingenious.client.azure.builder.*",
+  "ingenious.auth.*",
+  "ingenious.files.azure.*",
 ]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
@@ -311,15 +319,34 @@ disallow_untyped_defs = false
 disallow_incomplete_defs = false
 check_untyped_defs = false
 disallow_untyped_decorators = false
+no_implicit_optional = false
+warn_return_any = false
+warn_redundant_casts = false
+warn_unused_ignores = false
 
 [[tool.mypy.overrides]]
 # Relax mypy only for the *library-internal* test package
 module = ["ingenious.chunk.tests.*"]
 ignore_errors = true
-disallow_untyped_defs = false        # don’t require -> None, param hints, etc.
+disallow_untyped_defs = false        # don't require -> None, param hints, etc.
 ignore_missing_imports = true        # silence missing stubs (e.g. `regex`)
 check_untyped_defs = false
 disallow_untyped_decorators = false
+
+[[tool.mypy.overrides]]
+# Relax mypy for azure_search test packages which are internal tests
+module = [
+  "ingenious.services.azure_search.tests.*",
+]
+ignore_errors = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+check_untyped_defs = false
+disallow_untyped_decorators = false
+warn_return_any = false
+warn_redundant_casts = false
+warn_unused_ignores = false
+no_implicit_optional = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

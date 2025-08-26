@@ -217,12 +217,6 @@ class Profiles:
 
         return profiles
 
-    def get_profile_by_name(self, name: str) -> Optional[Any]:
-        for profile in self.profiles:
-            if hasattr(profile, "name") and getattr(profile, "name") == name:
-                return profile
-        return None
-
 
 def get_kv_secret(secretName: str) -> str:
     try:

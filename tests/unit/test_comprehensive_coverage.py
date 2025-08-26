@@ -244,7 +244,7 @@ class TestFileStorageCoverage:
             assert IFileStorage is not None
 
             # Test FileStorage if available
-            if FileStorage:
+            if FileStorage is not None:
                 mock_config = Mock()
                 try:
                     storage = FileStorage(mock_config)
@@ -442,7 +442,6 @@ class TestComprehensiveImports:
             "ingenious.core.structured_logging",
             "ingenious.models.message",
             "ingenious.models.config",
-            "ingenious.models.search",
             "ingenious.utils.protocols",
             "ingenious.utils.stage_executor",
             "ingenious.utils.log_levels",

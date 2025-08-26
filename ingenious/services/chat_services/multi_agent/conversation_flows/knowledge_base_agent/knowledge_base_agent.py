@@ -79,7 +79,6 @@ if TYPE_CHECKING:
     from ingenious.config.config import Config
 
     # Imports used dynamically or optionally
-    from ingenious.services.azure_search.provider import AzureSearchProvider
     from ingenious.services.chat_services.service import ChatService
 
 
@@ -1163,145 +1162,258 @@ class ConversationFlow(IConversationFlow):
         if policy == "local_only":
             return await self._search_local_chroma(search_query, top_k, logger)
 
-        # Track whether we must attempt Azure later.
-        attempt_azure = False
-        local_result: Optional[str] = None
-
-        # Prefer-local: try Chroma first; optionally fall back to Azure if empty.
+        # Handle prefer_local policy
+        prefer_local_needs_azure = False
         if policy == "prefer_local":
-            local_result = await self._search_local_chroma(search_query, top_k, logger)
-            if self._fallback_on_empty() and local_result.startswith(
-                "No relevant information"
-            ):
-                attempt_azure = use_azure_search  # enable Azure attempt below
-            else:
-                return local_result
+            result = await self._handle_prefer_local_policy(
+                search_query, use_azure_search, top_k, logger
+            )
+            if result is not None:
+                return result
+            # If we get here, prefer_local needs Azure fallback
+            prefer_local_needs_azure = True
 
-        # Azure path (azure_only, prefer_azure, or prefer_local on-empty case).
-        if policy in {"azure_only", "prefer_azure"}:
-            attempt_azure = use_azure_search
+        # Determine if Azure should be attempted
+        attempt_azure = self._should_attempt_azure(
+            policy, use_azure_search, prefer_local_needs_azure
+        )
 
-        last_err: Optional[Exception] = None
-        provider: AzureSearchProvider | None = None
-
+        # Try Azure search if applicable
         if attempt_azure:
+            result = await self._try_azure_search(search_query, top_k, policy, logger)
+            if result is not None:
+                return result
+
+        # Handle fallback scenarios
+        return await self._handle_search_fallback(
+            search_query, top_k, policy, use_azure_search, logger
+        )
+
+    async def _handle_prefer_local_policy(
+        self,
+        search_query: str,
+        use_azure_search: bool,
+        top_k: int,
+        logger: Optional[logging.Logger],
+    ) -> Optional[str]:
+        """Handle prefer_local policy: try Chroma first, optionally fall back to Azure."""
+        local_result = await self._search_local_chroma(search_query, top_k, logger)
+        if not (
+            self._fallback_on_empty()
+            and local_result.startswith("No relevant information")
+        ):
+            return local_result
+        # Returns None to indicate Azure fallback should be attempted
+        return None
+
+    def _should_attempt_azure(
+        self,
+        policy: str,
+        use_azure_search: bool,
+        prefer_local_needs_azure: bool = False,
+    ) -> bool:
+        """Determine if Azure search should be attempted based on policy."""
+        if prefer_local_needs_azure:
+            return use_azure_search
+        return policy in {"azure_only", "prefer_azure"} and use_azure_search
+
+    async def _try_azure_search(
+        self,
+        search_query: str,
+        top_k: int,
+        policy: str,
+        logger: Optional[logging.Logger],
+    ) -> Optional[str]:
+        """Attempt Azure search with error handling and fallback logic."""
+        last_err: Optional[Exception] = None
+        provider: Any = None  # Will be AzureSearchProvider when imported
+
+        try:
+            # Diagnostics & preflight
+            self._dump_kb_config_snapshot(logger)
+            await self._require_valid_azure_index(logger)
+
+            # Create provider and execute search
+            from ingenious.services.azure_search.provider import (
+                AzureSearchProvider,
+            )  # type: ignore
+
+            provider = AzureSearchProvider(self._config)
+
+            # Execute Azure search
+            azure_result = await self._execute_azure_search_with_provider(
+                provider, search_query, top_k
+            )
+
+            # Check for prefer_azure fallback
+            if self._should_fallback_from_azure(policy, azure_result):
+                if logger:
+                    logger.warning(
+                        "Azure returned no results; falling back to ChromaDB (KB_FALLBACK_ON_EMPTY=1)."
+                    )
+                self._ensure_kb_directory()
+                return await self._search_local_chroma(search_query, top_k, logger)
+
+            return azure_result
+
+        except ImportError as e:
+            last_err = e
+            self._handle_azure_import_error(e, policy, logger)
+        except PreflightError as e:
+            last_err = e
+            self._handle_azure_preflight_error(e, policy, logger)
+        except Exception as e:
+            last_err = e
+            self._handle_azure_general_error(e, policy, logger)
+        finally:
+            await self._close_azure_provider(provider)
+
+        # Store the error for later use if needed
+        self._last_azure_error = last_err
+        return None
+
+    async def _execute_azure_search_with_provider(
+        self,
+        provider: Any,
+        search_query: str,
+        top_k: int,
+    ) -> str:
+        """Execute Azure search using provided provider and format results."""
+        chunks: List[Dict[str, Any]] = await provider.retrieve(
+            search_query, top_k=top_k
+        )
+
+        if not chunks:
+            return f"No relevant information found in Azure AI Search for query: {search_query}"
+
+        return self._format_azure_results(chunks)
+
+    def _format_azure_results(self, chunks: List[Dict[str, Any]]) -> str:
+        """Format Azure search results into readable string."""
+        parts: List[str] = []
+        cap = self._azure_snippet_cap()
+
+        for i, c in enumerate(chunks, 1):
+            formatted_chunk = self._format_single_chunk(i, c, cap)
+            parts.append(formatted_chunk)
+
+        return (
+            "Found relevant information from Azure AI Search:\n\n"
+            + "\n\n---\n\n".join(parts)
+        )
+
+    def _format_single_chunk(self, index: int, chunk: Dict[str, Any], cap: int) -> str:
+        """Format a single search result chunk."""
+        title = chunk.get("title", chunk.get("id", f"Source {index}"))
+        score = chunk.get("_final_score", "")
+        snippet = chunk.get("snippet", "") or ""
+        content = chunk.get("content", "") or ""
+
+        if cap > 0:
+            snippet = cast(str, snippet)[:cap]
+            content = cast(str, content)[:cap]
+
+        lines: list[str] = []
+        if snippet:
+            lines.append(cast(str, snippet))
+        if content and content != snippet:
+            lines.append(cast(str, content))
+        body = "\n".join(lines) if lines else ""
+
+        return f"[{index}] {title} (score={score})\n{body}"
+
+    def _should_fallback_from_azure(self, policy: str, azure_result: str) -> bool:
+        """Check if we should fallback from Azure to local based on policy and result."""
+        return (
+            policy == "prefer_azure"
+            and self._fallback_on_empty()
+            and azure_result.startswith("No relevant information")
+        )
+
+    def _handle_azure_import_error(
+        self,
+        error: ImportError,
+        policy: str,
+        logger: Optional[logging.Logger],
+    ) -> None:
+        """Handle Azure import errors based on policy."""
+        if policy == "azure_only":
+            raise PreflightError(
+                provider="azure_search",
+                reason="sdk_missing",
+                detail="Azure Search SDK/provider not available; retrieval is disabled by policy.",
+                snapshot=self._dump_kb_config_snapshot(logger),
+            )
+        if logger:
+            logger.warning(
+                "Azure SDK/provider not available; falling back to ChromaDB."
+            )
+
+    def _handle_azure_preflight_error(
+        self,
+        error: PreflightError,
+        policy: str,
+        logger: Optional[logging.Logger],
+    ) -> None:
+        """Handle Azure preflight errors based on policy."""
+        if policy == "azure_only":
+            raise error
+        if logger:
+            logger.warning(
+                "Azure validation failed (%s); falling back to ChromaDB.", error
+            )
+
+    def _handle_azure_general_error(
+        self,
+        error: Exception,
+        policy: str,
+        logger: Optional[logging.Logger],
+    ) -> None:
+        """Handle general Azure errors based on policy."""
+        if policy == "azure_only":
+            raise PreflightError(
+                provider="azure_search",
+                reason="provider_failed",
+                detail=str(error),
+                snapshot=self._dump_kb_config_snapshot(logger),
+            )
+        if logger:
+            logger.warning(
+                "Azure provider failed (%s); falling back to ChromaDB.", error
+            )
+
+    async def _close_azure_provider(self, provider: Optional[Any]) -> None:
+        """Safely close Azure provider if it exists."""
+        if provider:
             try:
-                # Diagnostics & preflight (may raise synchronously for config errors).
-                self._dump_kb_config_snapshot(logger)
-                await self._require_valid_azure_index(logger)
+                await provider.close()
+            except Exception:
+                pass
 
-                from ingenious.services.azure_search.provider import (
-                    AzureSearchProvider,
-                )  # type: ignore
+    def _ensure_kb_directory(self) -> None:
+        """Ensure the KB directory exists for local retrieval."""
+        try:
+            os.makedirs(self._kb_path, exist_ok=True)
+        except Exception:
+            pass
 
-                provider = AzureSearchProvider(self._config)
-
-                chunks: List[Dict[str, Any]] = await provider.retrieve(
-                    search_query, top_k=top_k
-                )
-                if not chunks:
-                    azure_result = f"No relevant information found in Azure AI Search for query: {search_query}"
-                else:
-                    parts: List[str] = []
-                    cap = self._azure_snippet_cap()
-                    for i, c in enumerate(chunks, 1):
-                        title = c.get("title", c.get("id", f"Source {i}"))
-                        score = c.get("_final_score", "")
-                        snippet = c.get("snippet", "") or ""
-                        content = c.get("content", "") or ""
-                        if cap > 0:
-                            # Invariant: snippet/content are assumed to be strings from the KB provider.
-                            snippet = cast(str, snippet)[:cap]
-                            content = cast(str, content)[:cap]
-                        lines: list[str] = []
-                        if snippet:
-                            lines.append(cast(str, snippet))
-                        if content and content != snippet:
-                            lines.append(cast(str, content))
-                        body = "\n".join(lines) if lines else ""
-                        parts.append(f"[{i}] {title} (score={score})\n{body}")
-                    azure_result = (
-                        "Found relevant information from Azure AI Search:\n\n"
-                        + "\n\n---\n\n".join(parts)
-                    )
-
-                # prefer_azure: optionally fall back to local on empty.
-                if (
-                    policy == "prefer_azure"
-                    and self._fallback_on_empty()
-                    and azure_result.startswith("No relevant information")
-                ):
-                    if logger:
-                        logger.warning(
-                            "Azure returned no results; falling back to ChromaDB (KB_FALLBACK_ON_EMPTY=1)."
-                        )
-                    # Restore lazy creation of KB directory on Azure→local fallback.
-                    try:
-                        os.makedirs(self._kb_path, exist_ok=True)
-                    except Exception:
-                        pass
-                    return await self._search_local_chroma(search_query, top_k, logger)
-
-                return azure_result
-
-            except ImportError as e:
-                last_err = e
-                if policy == "azure_only":
-                    # Hard failure under strict policy.
-                    raise PreflightError(
-                        provider="azure_search",
-                        reason="sdk_missing",
-                        detail="Azure Search SDK/provider not available; retrieval is disabled by policy.",
-                        snapshot=self._dump_kb_config_snapshot(logger),
-                    )
-                if logger:
-                    logger.warning(
-                        "Azure SDK/provider not available; falling back to ChromaDB."
-                    )
-            except PreflightError as e:
-                last_err = e
-                if policy == "azure_only":
-                    # Bubble precise preflight errors under strict policy.
-                    raise
-                if logger:
-                    logger.warning(
-                        "Azure validation failed (%s); falling back to ChromaDB.", e
-                    )
-            except Exception as e:
-                last_err = e
-                if policy == "azure_only":
-                    # Surface provider failures explicitly when fallback is disallowed.
-                    raise PreflightError(
-                        provider="azure_search",
-                        reason="provider_failed",
-                        detail=str(e),
-                        snapshot=self._dump_kb_config_snapshot(logger),
-                    )
-                if logger:
-                    logger.warning(
-                        "Azure provider failed (%s); falling back to ChromaDB.", e
-                    )
-            finally:
-                # Always try to close the provider.
-                if provider:
-                    try:
-                        await provider.close()
-                    except Exception:
-                        pass
-
-        # If we reach here, either we were prefer_local and Azure failed,
-        # or prefer_azure fallback, or Azure was skipped by policy.
+    async def _handle_search_fallback(
+        self,
+        search_query: str,
+        top_k: int,
+        policy: str,
+        use_azure_search: bool,
+        logger: Optional[logging.Logger],
+    ) -> str:
+        """Handle fallback scenarios when Azure search wasn't used or failed."""
+        # Check if we can fallback to local
         if policy in {"prefer_azure", "prefer_local"} or (
             policy != "azure_only" and not use_azure_search
         ):
-            # Ensure the KB directory exists for local retrieval in fallback paths.
-            try:
-                os.makedirs(self._kb_path, exist_ok=True)
-            except Exception:
-                pass
+            self._ensure_kb_directory()
             return await self._search_local_chroma(search_query, top_k, logger)
 
-        # Azure-only but Azure wasn't available/allowed.
+        # Azure-only but Azure wasn't available/allowed
         if policy == "azure_only" and not use_azure_search:
             raise PreflightError(
                 provider="azure_search",
@@ -1310,16 +1422,16 @@ class ConversationFlow(IConversationFlow):
                 snapshot=self._dump_kb_config_snapshot(logger),
             )
 
-        # Defensive: if nothing matched, surface the last Azure error if present.
-        if last_err:
+        # Surface the last Azure error if present
+        if hasattr(self, "_last_azure_error") and self._last_azure_error:
             raise PreflightError(
                 provider="azure_search",
                 reason="unknown",
-                detail=str(last_err),
+                detail=str(self._last_azure_error),
                 snapshot=self._dump_kb_config_snapshot(logger),
             )
 
-        # Fallback final message (should be rare).
+        # Fallback final message
         return f"No relevant information found in Azure AI Search for query: {search_query}"
 
     # -----------------------------

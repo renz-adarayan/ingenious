@@ -24,8 +24,7 @@ class TestServerCommands:
         """Test that register_commands function exists"""
         assert callable(register_commands)
 
-    @patch("typer.Typer")
-    def test_register_commands_basic(self, mock_typer):
+    def test_register_commands_basic(self):
         """Test register_commands function"""
         mock_app = Mock()
         mock_console = Mock()
