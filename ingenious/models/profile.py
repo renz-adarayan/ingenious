@@ -11,7 +11,6 @@ class ModelConfig(AzureAuthConfig, BaseModel):
     base_url: str
     deployment: str = ""
     api_version: str = ""
-    deployment: str = ""
 
 
 class ChatHistoryConfig(AzureAuthConfig, BaseModel):

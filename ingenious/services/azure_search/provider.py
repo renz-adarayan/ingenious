@@ -31,7 +31,7 @@ from ingenious.services.retrieval.errors import GenerationDisabledError
 try:  # Some tests patch this symbol on the provider module
     from azure.search.documents.models import QueryType  # noqa: F401
 except Exception:  # pragma: no cover - tests may stub this anyway
-    QueryType = object()
+    QueryType = object()  # type: ignore[assignment,misc]
 
 if TYPE_CHECKING:
     from ingenious.config import IngeniousSettings
@@ -85,7 +85,7 @@ class AzureSearchProvider:
         try:
             from azure.search.documents.models import QueryType as _QT
         except Exception:
-            _QT = None
+            _QT = None  # type: ignore[assignment,misc]
         if _QT is not None and getattr(_QT, "SIMPLE", None) is not None:
             params["query_type"] = getattr(_QT, "SIMPLE")
         return params

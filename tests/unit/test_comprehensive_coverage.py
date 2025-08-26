@@ -244,7 +244,7 @@ class TestFileStorageCoverage:
             assert IFileStorage is not None
 
             # Test FileStorage if available
-            if FileStorage:
+            if FileStorage is not None:
                 mock_config = Mock()
                 try:
                     storage = FileStorage(mock_config)

@@ -288,6 +288,8 @@ def _select_models(models: list[ModelConfig]) -> tuple[ModelConfig, ModelConfig]
             "No chat/generation model configured (expected role 'chat' or model "
             "containing 'gpt'/'4o')."
         )
+    # This should never be reached, but satisfies mypy
+    raise ConfigError("Unexpected error in model selection")
 
 
 def _pick_models(settings: IngeniousSettings) -> tuple[str, str, str, str, str]:
@@ -422,12 +424,11 @@ def _ensure_openai_property_on_config_class() -> None:
         dynamically creating a namespace from the flattened attributes on the
         main `SearchConfig` object.
         """
-        key_val: str
         # First, figure out the correct value for key_val
         if isinstance(self.openai_key, SecretStr):
             key_val = self.openai_key.get_secret_value()
         else:
-            key_val = self.openai_key
+            key_val = self.openai_key  # type: ignore[unreachable]
 
         # Then, use it in a single, final return statement
         return SimpleNamespace(
