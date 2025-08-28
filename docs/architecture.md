@@ -20,7 +20,7 @@ graph TB
 
     subgraph "Core Engine"
         AGENT_SERVICE[Agent Service<br/>Conversation Manager]
-        PATTERN_SERVICE[Pattern Service<br/>Conversation Orchestrator]
+        CONVERSATION_FLOWS[Conversation Flows<br/>Workflow Orchestrator]
         LLM_SERVICE[LLM Service<br/>Azure OpenAI Integration]
     end
 
@@ -50,8 +50,8 @@ graph TB
     AUTH --> AGENT_SERVICE
 
     %% Core Engine interactions
-    AGENT_SERVICE --> PATTERN_SERVICE
-    PATTERN_SERVICE --> LLM_SERVICE
+    AGENT_SERVICE --> CONVERSATION_FLOWS
+    CONVERSATION_FLOWS --> LLM_SERVICE
     AGENT_SERVICE --> CUSTOM_AGENTS
 
     %% Extension Layer integrations
@@ -77,7 +77,7 @@ graph TB
 
     class API_CLIENT,DOCS clientLayer
     class API,AUTH apiLayer
-    class AGENT_SERVICE,PATTERN_SERVICE,LLM_SERVICE coreLayer
+    class AGENT_SERVICE,CONVERSATION_FLOWS,LLM_SERVICE coreLayer
     class CUSTOM_AGENTS,PATTERNS,TOOLS extensionLayer
     class CONFIG,HISTORY,FILES storageLayer
     class AZURE,EXTERNAL_API externalLayer
@@ -107,8 +107,8 @@ graph TB
 - Context preservation across conversations
 - Thread-safe execution
 
-**Pattern Service**
-- Conversation pattern orchestration
+**Conversation Flows Service**
+- Conversation flow orchestration
 - Multi-agent coordination
 - Workflow execution engine
 - State management
@@ -169,7 +169,7 @@ sequenceDiagram
     participant API
     participant Auth
     participant AgentService
-    participant PatternService
+    participant ConversationFlows
     participant LLM
     participant Storage
 
@@ -181,11 +181,11 @@ sequenceDiagram
     AgentService->>Storage: Load conversation history
     Storage-->>AgentService: Historical context
 
-    AgentService->>PatternService: Execute conversation pattern
-    PatternService->>LLM: Generate AI response
-    LLM-->>PatternService: AI-generated content
+    AgentService->>ConversationFlows: Execute conversation flow
+    ConversationFlows->>LLM: Generate AI response
+    LLM-->>ConversationFlows: AI-generated content
 
-    PatternService-->>AgentService: Pattern execution result
+    ConversationFlows-->>AgentService: Flow execution result
     AgentService->>Storage: Save conversation state
     AgentService-->>API: Conversation response
 
@@ -271,12 +271,12 @@ graph TB
 
 ### Extension Interface
 
-All extensions implement standardized interfaces:
+Extensions implement the standardized interface:
 
-- **IConversationFlow**: Conversation workflow interface
-- **IAgent**: Agent behavior interface
-- **ITool**: Tool integration interface
-- **IStorage**: Storage backend interface
+- **IConversationFlow**: Conversation workflow interface (defined in `ingenious/services/chat_services/multi_agent/service.py`)
+  - Required method: `get_conversation_response()`
+  - Auto-discovered by name match with `conversation_flow` parameter
+  - Can leverage agents, tools, and storage backends as needed
 
 ## Monitoring and Observability
 
