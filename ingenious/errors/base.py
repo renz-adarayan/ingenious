@@ -790,7 +790,7 @@ def handle_exception(
     error_class = error_mapping.get(type(exc), IngeniousError)
 
     # Separate known ErrorContext fields from additional metadata
-    context_fields = {
+    context_fields: Dict[str, Any] = {
         "operation": operation,
         "component": component,
     }
@@ -807,7 +807,7 @@ def handle_exception(
         "stack_trace",
     }
 
-    metadata = {}
+    metadata: Dict[str, Any] = {}
     for key, value in context_kwargs.items():
         if key in valid_fields:
             context_fields[key] = value
