@@ -742,7 +742,7 @@ class ValidateCommand(BaseCommand):
                 return False, issues
 
             # Test connectivity
-            conn_ok, conn_issue = self._test_azure_connection(first_model.base_url)
+            _, conn_issue = self._test_azure_connection(first_model.base_url)
             if conn_issue:
                 issues.append(conn_issue)
 
