@@ -166,15 +166,40 @@ All configuration is validated using Pydantic models in `ingenious/models/config
    ```python
    # ingenious_extensions/services/chat_services/multi_agent/conversation_flows/my_flow/my_flow.py
 
-   from ingenious.services.chat_services.multi_agent.conversation_flows.i_conversation_flow import IConversationFlow
+   from ingenious.services.chat_services.multi_agent.service import IConversationFlow
+   from ingenious.models.chat import ChatRequest, ChatResponse
 
-   class MyFlow(IConversationFlow):
-       def get_conversation_response(self, user_prompt: str, **kwargs) -> str:
+   class ConversationFlow(IConversationFlow):
+       async def get_conversation_response(self, chat_request: ChatRequest) -> ChatResponse:
            # Implement your conversation logic
-           pass
+           result = f"Processing: {chat_request.user_prompt}"
+
+           return ChatResponse(
+               thread_id=chat_request.thread_id,
+               message_id="generated-id",
+               agent_response=result,
+               token_count=0,
+               max_token_count=0,
+               memory_summary=f"Processed: {chat_request.user_prompt[:50]}..."
+           )
    ```
 
-2. **Add prompt templates:**
+   **Important Notes:**
+   - The class **must** be named `ConversationFlow` (not `MyFlow` or any other name)
+   - Use the correct import path: `from ingenious.services.chat_services.multi_agent.service import IConversationFlow`
+   - The method signature should match: `async def get_conversation_response(self, chat_request: ChatRequest) -> ChatResponse`
+
+2. **Set up Python module discovery:**
+
+   ```bash
+   # Critical step: Set PYTHONPATH to include your project directory
+   export PYTHONPATH=/path/to/your/project:$PYTHONPATH
+
+   # Or add it to your .env file:
+   echo "export PYTHONPATH=$(pwd):$PYTHONPATH" >> ~/.bashrc
+   ```
+
+3. **Add prompt templates (optional):**
 
    ```jinja2
    <!-- templates/prompts/my_agent_prompt.jinja -->
@@ -183,9 +208,16 @@ All configuration is validated using Pydantic models in `ingenious/models/config
    User query: {{ user_prompt }}
    ```
 
-3. **Register the flow:**
+4. **Register and test the flow:**
 
    The flow is automatically discovered based on the directory name matching the `conversation_flow` parameter.
+
+   ```bash
+   # Restart the server to discover new workflows
+   # Kill existing server first, then:
+   export PYTHONPATH=/path/to/your/project:$PYTHONPATH
+   KB_POLICY=local_only uv run ingen serve --port 8000
+   ```
 
 ### Testing Custom Extensions
 
@@ -198,6 +230,22 @@ curl -X POST http://localhost:8000/api/v1/chat \
     "conversation_flow": "my_flow"
   }'
 ```
+
+### Troubleshooting Custom Workflows
+
+**Common Issues:**
+
+1. **Import Error**: If you see `Failed to import module`, check:
+   - Import path is `from ingenious.services.chat_services.multi_agent.service import IConversationFlow`
+   - Class name is exactly `ConversationFlow`
+   - PYTHONPATH includes your project directory
+
+2. **Module Not Found**: If workflow isn't discovered:
+   - Restart the server after creating new workflows
+   - Verify PYTHONPATH is set correctly
+   - Check directory structure matches: `ingenious_extensions/services/chat_services/multi_agent/conversation_flows/your_flow_name/your_flow_name.py`
+
+3. **Server doesn't restart**: The server must be restarted to discover new workflows
 
 ## Database Development
 

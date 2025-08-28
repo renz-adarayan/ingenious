@@ -26,12 +26,12 @@ class TestSqliteSampleDb:
         """Test initialization when CSV file exists"""
         # Setup mocks
         mock_config = Mock()
-        mock_config.local_sql_db.database_path = "/tmp/test.db"
-        mock_config.local_sql_db.sample_csv_path = "/tmp/test.csv"
+        mock_config.local_sql_db.database_path = "/tmp/test.db"  # nosec B108: acceptable for testing
+        mock_config.local_sql_db.sample_csv_path = "/tmp/test.csv"  # nosec B108: acceptable for testing
         mock_config.local_sql_db.sample_database_name = "test_table"
         mock_get_config.return_value = mock_config
 
-        mock_exists.side_effect = lambda path: path in ["/tmp", "/tmp/test.csv"]
+        mock_exists.side_effect = lambda path: path in ["/tmp", "/tmp/test.csv"]  # nosec B108: acceptable for testing
 
         mock_connection = MagicMock()
         mock_connection.__enter__.return_value = mock_connection
@@ -50,10 +50,10 @@ class TestSqliteSampleDb:
         db = sqlite_sample_db()
 
         # Verify initialization
-        assert db.db_path == "/tmp/test.db"
+        assert db.db_path == "/tmp/test.db"  # nosec B108: acceptable for testing
         assert db._config == mock_config
         mock_makedirs.assert_not_called()  # Directory exists
-        mock_connect.assert_called_with("/tmp/test.db", check_same_thread=False)
+        mock_connect.assert_called_with("/tmp/test.db", check_same_thread=False)  # nosec B108: acceptable for testing
 
     @patch("ingenious.utils.load_sample_data.get_config")
     @patch("ingenious.utils.load_sample_data.os.path.exists")
@@ -66,13 +66,13 @@ class TestSqliteSampleDb:
         """Test initialization when directory needs to be created"""
         # Setup mocks
         mock_config = Mock()
-        mock_config.local_sql_db.database_path = "/tmp/new_dir/test.db"
-        mock_config.local_sql_db.sample_csv_path = "/tmp/test.csv"
+        mock_config.local_sql_db.database_path = "/tmp/new_dir/test.db"  # nosec B108: acceptable for testing
+        mock_config.local_sql_db.sample_csv_path = "/tmp/test.csv"  # nosec B108: acceptable for testing
         mock_config.local_sql_db.sample_database_name = "test_table"
         mock_get_config.return_value = mock_config
 
         mock_exists.side_effect = (
-            lambda path: path == "/tmp/test.csv"
+            lambda path: path == "/tmp/test.csv"  # nosec B108: acceptable for testing
         )  # Only CSV exists
 
         mock_connection = MagicMock()
@@ -90,7 +90,7 @@ class TestSqliteSampleDb:
         sqlite_sample_db()
 
         # Verify directory creation
-        mock_makedirs.assert_called_once_with("/tmp/new_dir", exist_ok=True)
+        mock_makedirs.assert_called_once_with("/tmp/new_dir", exist_ok=True)  # nosec B108: acceptable for testing
 
     @patch("ingenious.utils.load_sample_data.get_config")
     @patch("ingenious.utils.load_sample_data.os.path.exists")
@@ -99,11 +99,13 @@ class TestSqliteSampleDb:
         """Test initialization when CSV file doesn't exist (fallback table)"""
         # Setup mocks
         mock_config = Mock()
-        mock_config.local_sql_db.database_path = "/tmp/test.db"
-        mock_config.local_sql_db.sample_csv_path = "/tmp/nonexistent.csv"
+        mock_config.local_sql_db.database_path = "/tmp/test.db"  # nosec B108: acceptable for testing
+        mock_config.local_sql_db.sample_csv_path = "/tmp/nonexistent.csv"  # nosec B108: acceptable for testing
         mock_get_config.return_value = mock_config
 
-        mock_exists.side_effect = lambda path: path == "/tmp"  # Only directory exists
+        mock_exists.side_effect = (
+            lambda path: path == "/tmp"
+        )  # Only directory exists  # nosec B108: acceptable for testing
 
         mock_connection = MagicMock()
         mock_connection.__enter__.return_value = mock_connection
@@ -138,7 +140,7 @@ class TestSqliteSampleDb:
                 "ingenious.utils.load_sample_data.get_config"
             ) as mock_get_config:
                 mock_config = Mock()
-                mock_config.local_sql_db.database_path = "/tmp/dummy.db"
+                mock_config.local_sql_db.database_path = "/tmp/dummy.db"  # nosec B108: acceptable for testing
                 mock_config.local_sql_db.sample_csv_path = "/nonexistent.csv"
                 mock_get_config.return_value = mock_config
 
@@ -189,7 +191,7 @@ class TestSqliteSampleDb:
                 "ingenious.utils.load_sample_data.get_config"
             ) as mock_get_config:
                 mock_config = Mock()
-                mock_config.local_sql_db.database_path = "/tmp/dummy.db"
+                mock_config.local_sql_db.database_path = "/tmp/dummy.db"  # nosec B108: acceptable for testing
                 mock_config.local_sql_db.sample_csv_path = "/nonexistent.csv"
                 mock_get_config.return_value = mock_config
 
@@ -230,7 +232,7 @@ class TestSqliteSampleDb:
         """Test execute_sql method with database error"""
         with patch("ingenious.utils.load_sample_data.get_config") as mock_get_config:
             mock_config = Mock()
-            mock_config.local_sql_db.database_path = "/tmp/dummy.db"
+            mock_config.local_sql_db.database_path = "/tmp/dummy.db"  # nosec B108: acceptable for testing
             mock_config.local_sql_db.sample_csv_path = "/nonexistent.csv"
             mock_get_config.return_value = mock_config
 
@@ -273,12 +275,12 @@ class TestSqliteSampleDb:
         """Test _create_table with different pandas dtypes"""
         # Setup mocks
         mock_config = Mock()
-        mock_config.local_sql_db.database_path = "/tmp/test.db"
-        mock_config.local_sql_db.sample_csv_path = "/tmp/test.csv"
+        mock_config.local_sql_db.database_path = "/tmp/test.db"  # nosec B108: acceptable for testing
+        mock_config.local_sql_db.sample_csv_path = "/tmp/test.csv"  # nosec B108: acceptable for testing
         mock_config.local_sql_db.sample_database_name = "test_table"
         mock_get_config.return_value = mock_config
 
-        mock_exists.side_effect = lambda path: path in ["/tmp", "/tmp/test.csv"]
+        mock_exists.side_effect = lambda path: path in ["/tmp", "/tmp/test.csv"]  # nosec B108: acceptable for testing
 
         mock_connection = MagicMock()
         mock_connection.__enter__.return_value = mock_connection
@@ -314,12 +316,12 @@ class TestSqliteSampleDb:
         """Test _load_csv_data when CSV file exists"""
         # Setup mocks
         mock_config = Mock()
-        mock_config.local_sql_db.database_path = "/tmp/test.db"
-        mock_config.local_sql_db.sample_csv_path = "/tmp/test.csv"
+        mock_config.local_sql_db.database_path = "/tmp/test.db"  # nosec B108: acceptable for testing
+        mock_config.local_sql_db.sample_csv_path = "/tmp/test.csv"  # nosec B108: acceptable for testing
         mock_config.local_sql_db.sample_database_name = "test_table"
         mock_get_config.return_value = mock_config
 
-        mock_exists.side_effect = lambda path: path in ["/tmp", "/tmp/test.csv"]
+        mock_exists.side_effect = lambda path: path in ["/tmp", "/tmp/test.csv"]  # nosec B108: acceptable for testing
 
         mock_connection = MagicMock()
         mock_connection.__enter__.return_value = mock_connection
@@ -351,11 +353,13 @@ class TestSqliteSampleDb:
         """Test _load_csv_data when CSV file doesn't exist"""
         # Setup mocks
         mock_config = Mock()
-        mock_config.local_sql_db.database_path = "/tmp/test.db"
-        mock_config.local_sql_db.sample_csv_path = "/tmp/nonexistent.csv"
+        mock_config.local_sql_db.database_path = "/tmp/test.db"  # nosec B108: acceptable for testing
+        mock_config.local_sql_db.sample_csv_path = "/tmp/nonexistent.csv"  # nosec B108: acceptable for testing
         mock_get_config.return_value = mock_config
 
-        mock_exists.side_effect = lambda path: path == "/tmp"  # Only directory exists
+        mock_exists.side_effect = (
+            lambda path: path == "/tmp"
+        )  # Only directory exists  # nosec B108: acceptable for testing
 
         mock_connection = MagicMock()
         mock_connection.__enter__.return_value = mock_connection
@@ -367,7 +371,7 @@ class TestSqliteSampleDb:
             sqlite_sample_db()
 
             # Verify error message
-            mock_print.assert_any_call("CSV file not found at /tmp/nonexistent.csv.")
+            mock_print.assert_any_call("CSV file not found at /tmp/nonexistent.csv.")  # nosec B108: acceptable for testing
 
     def test_execute_sql_with_parameters(self):
         """Test execute_sql method with parameters"""
@@ -388,7 +392,7 @@ class TestSqliteSampleDb:
                 "ingenious.utils.load_sample_data.get_config"
             ) as mock_get_config:
                 mock_config = Mock()
-                mock_config.local_sql_db.database_path = "/tmp/dummy.db"
+                mock_config.local_sql_db.database_path = "/tmp/dummy.db"  # nosec B108: acceptable for testing
                 mock_config.local_sql_db.sample_csv_path = "/nonexistent.csv"
                 mock_get_config.return_value = mock_config
 

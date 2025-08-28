@@ -52,7 +52,7 @@ class TestIngeniousSettings:
 INGENIOUS_PROFILE=test_profile
 AZURE_OPENAI_API_KEY=test-api-key
 AZURE_OPENAI_BASE_URL=https://test.example.com/
-AZURE_OPENAI_MODEL=gpt-4.1-nano
+AZURE_OPENAI_MODEL=gpt-4o-mini
 INGENIOUS_CHAT_HISTORY__DATABASE_TYPE=sqlite
 INGENIOUS_LOGGING__ROOT_LOG_LEVEL=debug
 INGENIOUS_WEB_CONFIGURATION__PORT=9000
@@ -72,7 +72,7 @@ INGENIOUS_WEB_CONFIGURATION__PORT=9000
                 settings = IngeniousSettings(_env_file=env_file)
 
             assert settings.profile == "test_profile"
-            assert settings.models[0].model == "gpt-4.1-nano"
+            assert settings.models[0].model == "gpt-4o-mini"
             assert settings.models[0].api_key == "test-api-key"
             assert settings.models[0].base_url == "https://test.example.com/"
             assert settings.chat_history.database_type == "sqlite"
@@ -107,7 +107,7 @@ INGENIOUS_WEB_CONFIGURATION__PORT=9000
         with patch.dict(
             os.environ,
             {
-                "AZURE_OPENAI_MODEL": "gpt-4.1-nano",
+                "AZURE_OPENAI_MODEL": "gpt-4o-mini",
                 "AZURE_OPENAI_API_KEY": "key1",
                 "AZURE_OPENAI_BASE_URL": "https://endpoint1.com/",
                 "INGENIOUS_WEB_CONFIGURATION__AUTHENTICATION__ENABLE": "true",
@@ -118,7 +118,7 @@ INGENIOUS_WEB_CONFIGURATION__PORT=9000
             settings = IngeniousSettings()
 
             assert len(settings.models) >= 1
-            assert settings.models[0].model == "gpt-4.1-nano"
+            assert settings.models[0].model == "gpt-4o-mini"
             assert settings.models[0].api_key == "key1"
             assert settings.web_configuration.authentication.enable is True
             assert settings.web_configuration.authentication.username == "admin"
@@ -131,23 +131,23 @@ class TestModelSettings:
     def test_valid_model_creation(self):
         """Test creating a valid model configuration."""
         model = ModelSettings(
-            model="gpt-4.1-nano",
+            model="gpt-4o-mini",
             api_key="test-key",
             base_url="https://test.openai.azure.com/",
-            deployment="gpt-4.1-nano-deployment",
+            deployment="gpt-4o-mini-deployment",
         )
 
-        assert model.model == "gpt-4.1-nano"
+        assert model.model == "gpt-4o-mini"
         assert model.api_key == "test-key"
         assert model.base_url == "https://test.openai.azure.com/"
-        assert model.deployment == "gpt-4.1-nano-deployment"
+        assert model.deployment == "gpt-4o-mini-deployment"
         assert model.api_type == "rest"  # default value
 
     def test_placeholder_api_key_validation(self):
         """Test that placeholder API keys are rejected."""
         with pytest.raises(ValidationError, match="API key is required"):
             ModelSettings(
-                model="gpt-4.1-nano",
+                model="gpt-4o-mini",
                 api_key="placeholder_key",
                 base_url="https://test.openai.azure.com/",
             )
@@ -156,19 +156,19 @@ class TestModelSettings:
         """Test that placeholder base URLs are rejected."""
         with pytest.raises(ValidationError, match="Base URL is required"):
             ModelSettings(
-                model="gpt-4.1-nano", api_key="valid-key", base_url="placeholder_url"
+                model="gpt-4o-mini", api_key="valid-key", base_url="placeholder_url"
             )
 
     def test_invalid_base_url_format(self):
         """Test that invalid URL formats are rejected."""
         with pytest.raises(ValidationError, match="Base URL must start with"):
             ModelSettings(
-                model="gpt-4.1-nano", api_key="valid-key", base_url="invalid-url"
+                model="gpt-4o-mini", api_key="valid-key", base_url="invalid-url"
             )
 
     def test_empty_values_allowed(self):
         """Test that empty strings are allowed for development."""
-        model = ModelSettings(model="gpt-4.1-nano", api_key="", base_url="")
+        model = ModelSettings(model="gpt-4o-mini", api_key="", base_url="")
 
         assert model.api_key == ""
         assert model.base_url == ""
@@ -277,7 +277,7 @@ class TestConfigValidation:
         with patch.dict(
             os.environ,
             {
-                "AZURE_OPENAI_MODEL": "gpt-4.1-nano",
+                "AZURE_OPENAI_MODEL": "gpt-4o-mini",
                 "AZURE_OPENAI_API_KEY": "placeholder_key",
                 "AZURE_OPENAI_BASE_URL": "https://test.com/",
             },
@@ -406,7 +406,7 @@ class TestErrorHandling:
         with patch.dict(
             os.environ,
             {
-                "AZURE_OPENAI_MODEL": "gpt-4.1-nano",
+                "AZURE_OPENAI_MODEL": "gpt-4o-mini",
                 "AZURE_OPENAI_API_KEY": "placeholder_key",
                 "AZURE_OPENAI_BASE_URL": "placeholder_url",
             },

@@ -65,6 +65,7 @@ class sqlite_sample_db:
                     column_definitions.append(f"{col} TEXT")
 
             table_name: str = self._config.local_sql_db.sample_database_name
+            # nosec B608: table name from config, column definitions are validated CSV headers
             create_sql: str = f"""
                 CREATE TABLE IF NOT EXISTS {table_name} (
                     {", ".join(column_definitions)}

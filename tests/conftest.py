@@ -14,18 +14,6 @@ def mock_env():
 
 
 @pytest.fixture
-def sample_env_vars():
-    """Sample environment variables for testing"""
-    return {
-        "TEST_VAR": "test_value",
-        "AZURE_OPENAI_ENDPOINT": "https://test.openai.azure.com/",
-        "AZURE_OPENAI_API_KEY": "test_key",
-        "AZURE_OPENAI_API_VERSION": "2023-03-15-preview",
-        "AZURE_OPENAI_DEPLOYMENT_NAME": "gpt-4.1-nano",
-    }
-
-
-@pytest.fixture
 def mock_azure_openai():
     """Mock Azure OpenAI client"""
     with patch("ingenious.external_services.openai_service.AzureOpenAI") as mock_client:
@@ -35,23 +23,11 @@ def mock_azure_openai():
 
 
 @pytest.fixture
-def mock_file_system():
-    """Mock file system operations"""
-    with (
-        patch("pathlib.Path.exists"),
-        patch("pathlib.Path.read_text"),
-        patch("pathlib.Path.write_text"),
-        patch("builtins.open"),
-    ):
-        yield
-
-
-@pytest.fixture
 def sample_config_data():
     """Sample configuration data for testing"""
     return {
         "agents": [
-            {"name": "test_agent", "description": "Test agent", "model": "gpt-4.1-nano"}
+            {"name": "test_agent", "description": "Test agent", "model": "gpt-4o-mini"}
         ],
         "workflows": {
             "test_workflow": {"agents": ["test_agent"], "description": "Test workflow"}
@@ -67,17 +43,6 @@ def sample_message_data():
         "role": "user",
         "timestamp": "2023-01-01T00:00:00Z",
     }
-
-
-@pytest.fixture
-def mock_storage_client():
-    """Mock storage client for testing"""
-    mock_client = Mock()
-    mock_client.read_file = AsyncMock(return_value="mock file content")
-    mock_client.write_file = AsyncMock()
-    mock_client.delete_file = AsyncMock()
-    mock_client.list_files = Mock(return_value=["file1.txt", "file2.txt"])
-    return mock_client
 
 
 @pytest.fixture
@@ -106,7 +71,7 @@ def mock_openai_response():
         id="test_completion_id",
         choices=[mock_choice],
         created=1234567890,
-        model="gpt-4.1-nano",
+        model="gpt-4o-mini",
         object="chat.completion",
         usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
     )
@@ -180,7 +145,7 @@ def sample_agent_config():
     return {
         "name": "test_agent",
         "description": "Test agent for unit testing",
-        "model": "gpt-4.1-nano",
+        "model": "gpt-4o-mini",
         "temperature": 0.7,
         "max_tokens": 1000,
         "system_prompt": "You are a helpful test assistant.",

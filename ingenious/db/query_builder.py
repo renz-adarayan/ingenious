@@ -56,6 +56,7 @@ class SQLiteDialect(Dialect):
             f'"{col}" = EXCLUDED."{col}"' for col in columns if col != conflict_column
         )
 
+        # nosec B608: table name validated by caller, parameters use ? placeholders
         return f"""
             INSERT INTO {table} ({columns_str})
             VALUES ({values_str})
@@ -64,12 +65,14 @@ class SQLiteDialect(Dialect):
         """
 
     def get_temp_table_syntax(self, table_name: str, select_query: str) -> str:
+        # nosec B608: table_name validated by caller, select_query constructed internally
         return f"""
             CREATE TEMP TABLE {table_name} AS
             {select_query}
         """
 
     def get_drop_temp_table_syntax(self, table_name: str) -> str:
+        # nosec B608: table_name validated by caller
         return f"DROP TABLE {table_name}"
 
     def get_data_types(self) -> Dict[str, str]:
@@ -103,6 +106,7 @@ class AzureSQLDialect(Dialect):
             f"[{col}] = ?" for col in columns if col != conflict_column
         )
 
+        # nosec B608: table name validated by caller, parameters use ? placeholders
         return f"""
             MERGE {table} AS target
             USING (SELECT ? as {conflict_column}) AS source ON target.[{conflict_column}] = source.{conflict_column}
@@ -114,12 +118,14 @@ class AzureSQLDialect(Dialect):
         """
 
     def get_temp_table_syntax(self, table_name: str, select_query: str) -> str:
+        # nosec B608: table name validated by caller, select_query is constructed internally
         return f"""
             {select_query}
             INTO #{table_name}
         """
 
     def get_drop_temp_table_syntax(self, table_name: str) -> str:
+        # nosec B608: table_name validated by caller
         return f"DROP TABLE #{table_name}"
 
     def get_data_types(self) -> Dict[str, str]:
@@ -153,6 +159,7 @@ class QueryBuilder:
         if "{table_name}" in prefix:
             prefix = prefix.format(table_name=table_name)
 
+        # nosec B608: table name 'chat_history' is hardcoded constant, parameters use ? placeholders
         return f"""
             {prefix} {table_name} (
                 user_id {self._get_data_type("varchar")},
@@ -176,6 +183,7 @@ class QueryBuilder:
         if "{table_name}" in prefix:
             prefix = prefix.format(table_name=table_name)
 
+        # nosec B608: table name 'chat_history_summary' is hardcoded constant, parameters use ? placeholders
         return f"""
             {prefix} {table_name} (
                 user_id {self._get_data_type("varchar")},
@@ -199,6 +207,7 @@ class QueryBuilder:
         if "{table_name}" in prefix:
             prefix = prefix.format(table_name=table_name)
 
+        # nosec B608: table name 'users' is hardcoded constant, parameters use ? placeholders
         return f"""
             {prefix} {table_name} (
                 id {self._get_data_type("uuid")} PRIMARY KEY,
@@ -223,6 +232,7 @@ class QueryBuilder:
                 'FOREIGN KEY ("userId") REFERENCES users("id") ON DELETE CASCADE'
             )
 
+        # nosec B608: table name 'threads' is hardcoded constant, parameters use ? placeholders
         return f"""
             {prefix} {table_name} (
                 id {self._get_data_type("uuid")} PRIMARY KEY,
@@ -246,6 +256,7 @@ class QueryBuilder:
         # Handle 'end' column name conflict in SQL Server
         end_column = "[end]" if isinstance(self.dialect, AzureSQLDialect) else "end"
 
+        # nosec B608: table name 'steps' is hardcoded constant, parameters use ? placeholders
         return f"""
             {prefix} {table_name} (
                 id {self._get_data_type("uuid")} PRIMARY KEY,
@@ -278,6 +289,7 @@ class QueryBuilder:
         if "{table_name}" in prefix:
             prefix = prefix.format(table_name=table_name)
 
+        # nosec B608: table name 'elements' is hardcoded constant, parameters use ? placeholders
         return f"""
             {prefix} {table_name} (
                 id {self._get_data_type("uuid")} PRIMARY KEY,
@@ -303,6 +315,7 @@ class QueryBuilder:
         if "{table_name}" in prefix:
             prefix = prefix.format(table_name=table_name)
 
+        # nosec B608: table name 'feedbacks' is hardcoded constant, parameters use ? placeholders
         return f"""
             {prefix} {table_name} (
                 id {self._get_data_type("uuid")} PRIMARY KEY,
@@ -347,6 +360,7 @@ class QueryBuilder:
         limit_clause = self.dialect.get_limit_clause(1)
 
         if isinstance(self.dialect, AzureSQLDialect):
+            # nosec B608: table name 'chat_history_summary' is hardcoded constant, parameters use ? placeholders
             return f"""
                 SELECT {limit_clause} user_id, thread_id, message_id, positive_feedback, timestamp, role, content,
                        content_filter_results, tool_calls, tool_call_id, tool_call_function
@@ -355,6 +369,7 @@ class QueryBuilder:
                 ORDER BY timestamp DESC
             """
         else:
+            # nosec B608: table name 'chat_history_summary' is hardcoded constant, parameters use ? placeholders
             return f"""
                 SELECT user_id, thread_id, message_id, positive_feedback, timestamp, role, content,
                        content_filter_results, tool_calls, tool_call_id, tool_call_function
@@ -414,6 +429,7 @@ class QueryBuilder:
     def select_thread_messages(self, limit: int = 5) -> str:
         """Generate SELECT query for thread messages."""
         if isinstance(self.dialect, AzureSQLDialect):
+            # nosec B608: table name 'chat_history' is hardcoded constant, parameters use ? placeholders
             return f"""
                 SELECT TOP {limit} user_id, thread_id, message_id, positive_feedback, timestamp, role, content,
                        content_filter_results, tool_calls, tool_call_id, tool_call_function
@@ -428,6 +444,7 @@ class QueryBuilder:
                 ORDER BY timestamp ASC
             """
         else:
+            # nosec B608: table name 'chat_history' is hardcoded constant, parameters use ? placeholders
             return f"""
                 SELECT *
                 FROM (
@@ -446,6 +463,7 @@ class QueryBuilder:
         limit_clause = self.dialect.get_limit_clause(1)
 
         if isinstance(self.dialect, AzureSQLDialect):
+            # nosec B608: table name 'chat_history_summary' is hardcoded constant, parameters use ? placeholders
             return f"""
                 SELECT {limit_clause} user_id, thread_id, message_id, positive_feedback, timestamp, role, content,
                        content_filter_results, tool_calls, tool_call_id, tool_call_function
@@ -454,6 +472,7 @@ class QueryBuilder:
                 ORDER BY timestamp DESC
             """
         else:
+            # nosec B608: table name 'chat_history_summary' is hardcoded constant, parameters use ? placeholders
             return f"""
                 SELECT user_id, thread_id, message_id, positive_feedback, timestamp, role, content,
                        content_filter_results, tool_calls, tool_call_id, tool_call_function

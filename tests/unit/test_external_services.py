@@ -50,7 +50,7 @@ class TestOpenAIService:
         azure_endpoint = "https://test.openai.azure.com/"
         api_key = "test_key"
         api_version = "2023-03-15-preview"
-        model = "gpt-4.1-nano"
+        model = "gpt-4o-mini"
 
         mock_client = object()
         with patch(
@@ -87,7 +87,7 @@ class TestOpenAIService:
         azure_endpoint = "https://test.openai.azure.com/"
         api_key = "test_key"
         api_version = "2023-03-15-preview"
-        model = "gpt-4.1-nano"
+        model = "gpt-4o-mini"
 
         mock_client = object()
         with patch(
@@ -126,7 +126,7 @@ class TestOpenAIService:
             id="test_id",
             choices=[mock_choice],
             created=1234567890,
-            model="gpt-4.1-nano",
+            model="gpt-4o-mini",
             object="chat.completion",
             usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
         )
@@ -136,7 +136,7 @@ class TestOpenAIService:
             "https://test.openai.azure.com/",
             "k",
             "2023-03-15-preview",
-            "gpt-4.1-nano",
+            "gpt-4o-mini",
             client=client,
         )
 
@@ -156,7 +156,7 @@ class TestOpenAIService:
             id="test_id",
             choices=[mock_choice],
             created=1234567890,
-            model="gpt-4.1-nano",
+            model="gpt-4o-mini",
             object="chat.completion",
             usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
         )
@@ -166,7 +166,7 @@ class TestOpenAIService:
             "https://test.openai.azure.com/",
             "k",
             "2023-03-15-preview",
-            "gpt-4.1-nano",
+            "gpt-4o-mini",
             client=client,
         )
 
@@ -195,7 +195,7 @@ class TestOpenAIService:
             "https://test.openai.azure.com/",
             "k",
             "2023-03-15-preview",
-            "gpt-4.1-nano",
+            "gpt-4o-mini",
             client=client,
         )
 
@@ -218,7 +218,7 @@ class TestOpenAIService:
             "https://test.openai.azure.com/",
             "k",
             "2023-03-15-preview",
-            "gpt-4.1-nano",
+            "gpt-4o-mini",
             client=client,
         )
 
@@ -238,7 +238,7 @@ class TestOpenAIService:
             "https://test.openai.azure.com/",
             "k",
             "2023-03-15-preview",
-            "gpt-4.1-nano",
+            "gpt-4o-mini",
             client=client,
         )
 
@@ -254,7 +254,7 @@ class TestOpenAIService:
             id="test_id",
             choices=[mock_choice],
             created=1234567890,
-            model="gpt-4.1-nano",
+            model="gpt-4o-mini",
             object="chat.completion",
             usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
         )
@@ -264,7 +264,7 @@ class TestOpenAIService:
             "https://test.openai.azure.com/",
             "k",
             "2023-03-15-preview",
-            "gpt-4.1-nano",
+            "gpt-4o-mini",
             client=client,
         )
 
@@ -284,7 +284,7 @@ class TestOpenAIService:
             id="test_id",
             choices=[mock_choice],
             created=1234567890,
-            model="gpt-4.1-nano",
+            model="gpt-4o-mini",
             object="chat.completion",
             usage={"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10},
         )
@@ -294,7 +294,7 @@ class TestOpenAIService:
             "https://test.openai.azure.com/",
             "k",
             "2023-03-15-preview",
-            "gpt-4.1-nano",
+            "gpt-4o-mini",
             client=client,
         )
 
@@ -310,7 +310,7 @@ class TestOpenAIService:
             id="test_id",
             choices=[],
             created=1234567890,
-            model="gpt-4.1-nano",
+            model="gpt-4o-mini",
             object="chat.completion",
             usage={"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10},
         )
@@ -320,7 +320,7 @@ class TestOpenAIService:
             "https://test.openai.azure.com/",
             "k",
             "2023-03-15-preview",
-            "gpt-4.1-nano",
+            "gpt-4o-mini",
             client=client,
         )
 
@@ -339,7 +339,7 @@ class TestOpenAIService:
             id="test_id",
             choices=[mock_choice],
             created=1234567890,
-            model="gpt-4.1-nano",
+            model="gpt-4o-mini",
             object="chat.completion",
             usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
         )
@@ -349,7 +349,7 @@ class TestOpenAIService:
             "https://test.openai.azure.com/",
             "k",
             "2023-03-15-preview",
-            "gpt-4.1-nano",
+            "gpt-4o-mini",
             client=client,
         )
 
@@ -378,7 +378,7 @@ class TestOpenAIService:
             id="test_id",
             choices=[mock_choice],
             created=1234567890,
-            model="gpt-4.1-nano",
+            model="gpt-4o-mini",
             object="chat.completion",
             usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
         )
@@ -388,7 +388,7 @@ class TestOpenAIService:
             "https://test.openai.azure.com/",
             "k",
             "2023-03-15-preview",
-            "gpt-4.1-nano",
+            "gpt-4o-mini",
             client=client,
         )
 

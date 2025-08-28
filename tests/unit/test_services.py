@@ -243,22 +243,22 @@ class TestLegacyMemoryManager:
 
     def test_init_with_storage_client(self):
         """Test LegacyMemoryManager initialization."""
-        memory_path = "/tmp/memory"
+        memory_path = "/tmp/memory"  # nosec B108: acceptable for testing
         manager = LegacyMemoryManager(memory_path)
         assert manager.memory_path == memory_path
 
     def test_get_memory_file_path(self):
         """Test memory file path generation."""
-        memory_path = "/tmp/memory"
+        memory_path = "/tmp/memory"  # nosec B108: acceptable for testing
         manager = LegacyMemoryManager(memory_path)
 
         path = manager._get_memory_file_path("test_thread")
-        expected = os.path.join("/tmp/memory", "test_thread", "context.md")
+        expected = os.path.join("/tmp/memory", "test_thread", "context.md")  # nosec B108: acceptable for testing
         assert path == expected
 
     def test_read_memory_success(self):
         """Test reading memory successfully."""
-        memory_path = "/tmp/memory"
+        memory_path = "/tmp/memory"  # nosec B108: acceptable for testing
         manager = LegacyMemoryManager(memory_path)
 
         with (
@@ -270,7 +270,7 @@ class TestLegacyMemoryManager:
 
     def test_write_memory_success(self):
         """Test writing memory successfully."""
-        memory_path = "/tmp/memory"
+        memory_path = "/tmp/memory"  # nosec B108: acceptable for testing
         manager = LegacyMemoryManager(memory_path)
 
         with (
@@ -338,7 +338,7 @@ class TestMemoryManagerFactory:
         """Test getting memory manager with storage client."""
         mock_config = Mock()
         mock_config.file_storage.storage_type = "local"
-        mock_config.chat_history.memory_path = "/tmp/memory"
+        mock_config.chat_history.memory_path = "/tmp/memory"  # nosec B108: acceptable for testing
 
         with patch("ingenious.services.memory_manager.FileStorage"):
             manager = get_memory_manager(mock_config)

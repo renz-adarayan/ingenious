@@ -53,6 +53,11 @@ dependencies = [
   "tiktoken>=0.9.0",
   "typer==0.16.0",
   "uvicorn>=0.35.0",
+  "mkdocs-nav-weight>=0.2.0",
+  "mkdocs-table-reader-plugin>=3.1.0",
+  "mkdocs-redirects>=1.2.2",
+  "mkdocs-git-revision-date-localized-plugin>=1.4.7",
+  "mkdocs-minify-plugin>=0.8.0",
 ]
 
 [project.urls]
@@ -321,8 +326,6 @@ check_untyped_defs = false
 disallow_untyped_decorators = false
 no_implicit_optional = false
 warn_return_any = false
-warn_redundant_casts = false
-warn_unused_ignores = false
 
 [[tool.mypy.overrides]]
 # Relax mypy only for the *library-internal* test package
@@ -344,8 +347,6 @@ ignore_missing_imports = true
 check_untyped_defs = false
 disallow_untyped_decorators = false
 warn_return_any = false
-warn_redundant_casts = false
-warn_unused_ignores = false
 no_implicit_optional = false
 
 [tool.pytest.ini_options]

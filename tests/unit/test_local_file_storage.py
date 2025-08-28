@@ -100,8 +100,7 @@ class TestLocalFileStorage:
 
     @pytest.mark.asyncio
     @patch("pathlib.Path.iterdir")
-    @patch("pathlib.Path.is_file")
-    async def test_list_files_success(self, mock_is_file, mock_iterdir):
+    async def test_list_files_success(self, mock_iterdir):
         """Test successful file listing"""
         storage = local_FileStorageRepository(self.mock_config, self.mock_fs_config)
 

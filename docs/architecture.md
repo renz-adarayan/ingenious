@@ -20,7 +20,7 @@ graph TB
 
     subgraph "Core Engine"
         AGENT_SERVICE[Agent Service<br/>Conversation Manager]
-        PATTERN_SERVICE[Pattern Service<br/>Conversation Orchestrator]
+        CONVERSATION_FLOWS[Conversation Flows<br/>Workflow Orchestrator]
         LLM_SERVICE[LLM Service<br/>Azure OpenAI Integration]
     end
 
@@ -50,8 +50,8 @@ graph TB
     AUTH --> AGENT_SERVICE
 
     %% Core Engine interactions
-    AGENT_SERVICE --> PATTERN_SERVICE
-    PATTERN_SERVICE --> LLM_SERVICE
+    AGENT_SERVICE --> CONVERSATION_FLOWS
+    CONVERSATION_FLOWS --> LLM_SERVICE
     AGENT_SERVICE --> CUSTOM_AGENTS
 
     %% Extension Layer integrations
@@ -77,7 +77,7 @@ graph TB
 
     class API_CLIENT,DOCS clientLayer
     class API,AUTH apiLayer
-    class AGENT_SERVICE,PATTERN_SERVICE,LLM_SERVICE coreLayer
+    class AGENT_SERVICE,CONVERSATION_FLOWS,LLM_SERVICE coreLayer
     class CUSTOM_AGENTS,PATTERNS,TOOLS extensionLayer
     class CONFIG,HISTORY,FILES storageLayer
     class AZURE,EXTERNAL_API externalLayer
@@ -107,8 +107,8 @@ graph TB
 - Context preservation across conversations
 - Thread-safe execution
 
-**Pattern Service**
-- Conversation pattern orchestration
+**Conversation Flows Service**
+- Conversation flow orchestration
 - Multi-agent coordination
 - Workflow execution engine
 - State management
@@ -149,15 +149,21 @@ graph TB
 
 **Chat History**
 - Conversation persistence
-- Multiple storage backends (SQLite, Azure SQL)
+- Flexible storage backends: SQLite for development, Azure SQL/Cosmos DB for production
 - Query and retrieval capabilities
 - Data retention policies
 
 **File Storage**
-- Local and Azure Blob storage
+- Dual storage support: Local filesystem for development, Azure Blob for production
 - Version control for templates
 - Binary file handling
 - Secure access management
+
+**Knowledge Base**
+- Flexible search backends: ChromaDB for development, Azure AI Search for production
+- Document indexing and retrieval
+- Semantic search capabilities
+- Content management
 
 ## Data Flow
 
@@ -169,7 +175,7 @@ sequenceDiagram
     participant API
     participant Auth
     participant AgentService
-    participant PatternService
+    participant ConversationFlows
     participant LLM
     participant Storage
 
@@ -181,11 +187,11 @@ sequenceDiagram
     AgentService->>Storage: Load conversation history
     Storage-->>AgentService: Historical context
 
-    AgentService->>PatternService: Execute conversation pattern
-    PatternService->>LLM: Generate AI response
-    LLM-->>PatternService: AI-generated content
+    AgentService->>ConversationFlows: Execute conversation flow
+    ConversationFlows->>LLM: Generate AI response
+    LLM-->>ConversationFlows: AI-generated content
 
-    PatternService-->>AgentService: Pattern execution result
+    ConversationFlows-->>AgentService: Flow execution result
     AgentService->>Storage: Save conversation state
     AgentService-->>API: Conversation response
 
@@ -271,12 +277,12 @@ graph TB
 
 ### Extension Interface
 
-All extensions implement standardized interfaces:
+Extensions implement the standardized interface:
 
-- **IConversationFlow**: Conversation workflow interface
-- **IAgent**: Agent behavior interface
-- **ITool**: Tool integration interface
-- **IStorage**: Storage backend interface
+- **IConversationFlow**: Conversation workflow interface (defined in `ingenious/services/chat_services/multi_agent/service.py`)
+  - Required method: `get_conversation_response()`
+  - Auto-discovered by name match with `conversation_flow` parameter
+  - Can leverage agents, tools, and storage backends as needed
 
 ## Monitoring and Observability
 
@@ -302,35 +308,54 @@ graph LR
 
 ## Deployment Architecture
 
-### Single Instance Deployment
+### Local Development Deployment
 
 ```mermaid
 graph TB
-    LOAD_BALANCER[Load Balancer] --> APP_INSTANCE[Ingenious Instance]
-    APP_INSTANCE --> LOCAL_DB[Local SQLite]
-    APP_INSTANCE --> LOCAL_FILES[Local File Storage]
-    APP_INSTANCE --> AZURE_OPENAI[Azure OpenAI]
+    CLIENT[API Client] --> APP_INSTANCE[Ingenious Instance<br/>:8000]
+    APP_INSTANCE --> LOCAL_DB[SQLite Database<br/>.tmp/chat_history.db]
+    APP_INSTANCE --> LOCAL_FILES[Local File Storage<br/>.tmp/]
+    APP_INSTANCE --> CHROMADB[ChromaDB<br/>Knowledge Base]
+    APP_INSTANCE --> AZURE_OPENAI[Azure OpenAI<br/>LLM Service]
+
+    classDef localServices fill:#e8f5e8
+    classDef azureServices fill:#e1f5fe
+
+    class LOCAL_DB,LOCAL_FILES,CHROMADB localServices
+    class AZURE_OPENAI azureServices
 ```
 
-### Distributed Deployment
+### Production Azure Deployment
 
 ```mermaid
 graph TB
-    LOAD_BALANCER[Load Balancer] --> APP1[Ingenious Instance 1]
-    LOAD_BALANCER --> APP2[Ingenious Instance 2]
-    LOAD_BALANCER --> APPN[Ingenious Instance N]
+    LOAD_BALANCER[Azure Load Balancer] --> APP1[Ingenious Instance 1<br/>Container Apps]
+    LOAD_BALANCER --> APP2[Ingenious Instance 2<br/>Container Apps]
+    LOAD_BALANCER --> APPN[Ingenious Instance N<br/>Container Apps]
 
-    APP1 --> SHARED_DB[Azure SQL Database]
-    APP2 --> SHARED_DB
-    APPN --> SHARED_DB
+    APP1 --> AZURE_SQL[Azure SQL Database<br/>Chat History]
+    APP2 --> AZURE_SQL
+    APPN --> AZURE_SQL
 
-    APP1 --> BLOB_STORAGE[Azure Blob Storage]
+    APP1 --> COSMOS_DB[Cosmos DB<br/>Document Storage]
+    APP2 --> COSMOS_DB
+    APPN --> COSMOS_DB
+
+    APP1 --> BLOB_STORAGE[Azure Blob Storage<br/>File Storage]
     APP2 --> BLOB_STORAGE
     APPN --> BLOB_STORAGE
 
-    APP1 --> AZURE_OPENAI[Azure OpenAI]
+    APP1 --> AI_SEARCH[Azure AI Search<br/>Knowledge Base]
+    APP2 --> AI_SEARCH
+    APPN --> AI_SEARCH
+
+    APP1 --> AZURE_OPENAI[Azure OpenAI<br/>LLM Service]
     APP2 --> AZURE_OPENAI
     APPN --> AZURE_OPENAI
+
+    classDef azureServices fill:#e1f5fe
+
+    class LOAD_BALANCER,APP1,APP2,APPN,AZURE_SQL,COSMOS_DB,BLOB_STORAGE,AI_SEARCH,AZURE_OPENAI azureServices
 ```
 
-This architecture provides a solid foundation for building scalable, secure, and maintainable AI agent APIs with comprehensive Azure integrations.
+This flexible architecture enables developers to start with local development using minimal dependencies (SQLite, ChromaDB) and seamlessly scale to production Azure deployments (Azure SQL, Cosmos DB, Azure AI Search, Azure Blob, Container Apps) as needed. The dual-configuration approach provides a smooth development-to-production pathway while maintaining the same API interface and conversation flows.

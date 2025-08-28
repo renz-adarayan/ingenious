@@ -5,16 +5,18 @@
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Insight-Services-APAC/ingenious)
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
 
-Ingenious is a tool for quickly setting up APIs to interact with AI Agents. It features multi-agent conversation flows using Microsoft's AutoGen, JWT authentication, and comprehensive Azure service integrations.
+Ingenious is a tool for quickly setting up APIs to interact with AI Agents. It features multi-agent conversation flows using Microsoft's AutoGen, JWT authentication, and supports both local development (SQLite, ChromaDB) and production Azure deployments (Azure SQL, Cosmos DB, Azure AI Search, Azure Blob, Container Apps).
 
 ## Quick Start
 
-Get up and running in 5 minutes with Azure OpenAI!
+Get up and running in 5 minutes with just an OpenAI API key!
 
 ### Prerequisites
 - Python 3.13 or higher (required - earlier versions are not supported)
-- Azure OpenAI API credentials
+- OpenAI or Azure OpenAI API credentials
 - [uv package manager](https://docs.astral.sh/uv/)
+
+**Flexible Architecture**: Ingenious supports both local development (SQLite, ChromaDB) and production Azure deployments (Azure SQL, Cosmos DB, Azure AI Search, Azure Blob, Container Apps). Start local, scale to Azure as needed.
 
 ### AI-Assisted Set Up (give this prompt to your preferred coding agent)
 
@@ -59,12 +61,16 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
     **Required configuration (add to .env file)**:
     ```bash
     # Model Configuration (only INGENIOUS_* variables are used by the system)
-    INGENIOUS_MODELS__0__MODEL=gpt-4.1-nano
+    INGENIOUS_MODELS__0__MODEL=gpt-4o-mini
     INGENIOUS_MODELS__0__API_TYPE=rest
     INGENIOUS_MODELS__0__API_VERSION=2024-12-01-preview
-    INGENIOUS_MODELS__0__DEPLOYMENT=your-gpt4.1-nano-deployment-name
+    INGENIOUS_MODELS__0__DEPLOYMENT=gpt-4o-mini
     INGENIOUS_MODELS__0__API_KEY=your-actual-api-key-here
     INGENIOUS_MODELS__0__BASE_URL=https://your-resource.openai.azure.com/
+
+    # For OpenAI (not Azure), use:
+    # INGENIOUS_MODELS__0__BASE_URL=https://api.openai.com/v1
+    # INGENIOUS_MODELS__0__API_VERSION=2024-02-01
 
     # Basic required settings
     INGENIOUS_CHAT_SERVICE__TYPE=multi_agent
@@ -72,14 +78,25 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
     INGENIOUS_CHAT_HISTORY__DATABASE_PATH=./.tmp/chat_history.db
     INGENIOUS_CHAT_HISTORY__MEMORY_PATH=./.tmp
 
-    # Optional: Authentication settings (enabled by default)
-    # INGENIOUS_WEB_CONFIGURATION__ENABLE_AUTHENTICATION=false  # To disable auth
+    # Knowledge base configuration - local ChromaDB for development (Azure AI Search available for production)
+    KB_POLICY=local_only
+    KB_TOPK_DIRECT=3
+    KB_TOPK_ASSIST=5
+    KB_MODE=direct
+
+    # SQL database configuration - local SQLite for development (Azure SQL available for production)
+    INGENIOUS_LOCAL_SQL_DB__DATABASE_PATH=./.tmp/sample_sql.db
+
+    # Optional: Authentication settings (disabled by default for local development)
+    INGENIOUS_WEB_CONFIGURATION__AUTHENTICATION__ENABLE=false
     ```
 
 3. **Validate Configuration**:
     ```bash
     uv run ingen validate  # Check configuration before starting
     ```
+
+    **Expected validation output**: You should see confirmation that your configuration is valid and a count of available workflows (typically showing 4/4 workflows working: classification-agent, knowledge-base-agent, sql-manipulation-agent, and bike-insights after `ingen init`).
 
     **If validation fails with port conflicts**:
     ```bash
@@ -102,17 +119,27 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
     # Start server on port 8000 (recommended for development)
     uv run ingen serve --port 8000
 
+    # For knowledge-base-agent, ensure local ChromaDB policy is set:
+    KB_POLICY=local_only uv run ingen serve --port 8000
+
     # Additional options:
     # --host 0.0.0.0         # Bind host (default: 0.0.0.0)
     # --port                 # Port to bind (default: 80 or $WEB_PORT env var)
-    # --config config.yml    # Legacy config file (deprecated - use environment variables)
-    # --profile production   # Legacy profile (deprecated - use environment variables)
     ```
 
 5. **Verify Health**:
     ```bash
     # Check server health
     curl http://localhost:8000/api/v1/health
+    ```
+
+    **Expected health response**: A JSON response indicating server status and available workflows:
+    ```json
+    {
+      "status": "healthy",
+      "message": "Service is running",
+      "workflows": ["classification-agent", "knowledge-base-agent", "sql-manipulation-agent", "bike-insights"]
+    }
     ```
 
 6. **Test with Core Workflows**:
@@ -130,10 +157,50 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
     curl -X POST http://localhost:8000/api/v1/chat -H "Content-Type: application/json" -d @test_sql.json
     ```
 
+    **To populate knowledge base for testing** (optional but recommended):
+    ```bash
+    # Create sample knowledge base document for testing
+    mkdir -p .tmp/knowledge_base
+    cat > .tmp/knowledge_base/setup_guide.md << 'EOF'
+    # Ingenious Setup Guide
+
+    ## Quick Setup Instructions
+
+    Ingenious is a multi-agent AI framework that allows you to quickly set up APIs for AI agents.
+
+    ### Prerequisites
+    - Python 3.13+
+    - OpenAI API key or Azure OpenAI credentials
+    - UV package manager
+
+    ### Installation Steps
+    1. Initialize UV project: `uv init`
+    2. Install Ingenious: `uv add "ingenious[azure-full]"`
+    3. Initialize project: `uv run ingen init`
+    4. Configure environment variables in .env file
+    5. Start server: `uv run ingen serve --port 8000`
+    EOF
+
+    # Now test knowledge-base-agent again to see populated results
+    curl -X POST http://localhost:8000/api/v1/chat -H "Content-Type: application/json" -d @test_knowledge.json
+    ```
+
 **Expected Responses**:
-- **Successful classification-agent response**: JSON with message analysis and categories
-- **Successful knowledge-base-agent response**: JSON with relevant information retrieved (may indicate empty knowledge base initially)
-- **Successful sql-manipulation-agent response**: JSON with query results or confirmation
+- **Successful classification-agent response**: JSON with message analysis, sentiment scores, and topic categorization
+- **Successful knowledge-base-agent response**: JSON with relevant information retrieved from local ChromaDB (with sample document, will contain setup instructions; without, may indicate empty knowledge base)
+- **Successful sql-manipulation-agent response**: JSON with SQL query results showing database table information from local SQLite database
+
+**Example successful responses**:
+```bash
+# classification-agent typical response format:
+{"response": "Analysis: Positive sentiment (0.8/1.0)... Category: Product Feedback"}
+
+# knowledge-base-agent with populated knowledge base:
+{"response": "Based on the setup guide: Ingenious requires Python 3.13+..."}
+
+# sql-manipulation-agent typical response:
+{"response": "Found 3 tables in database: users, products, orders..."}
+```
 
 **If you see error responses**, check the troubleshooting section above or the detailed [troubleshooting guide](docs/getting-started/troubleshooting.md).
 
@@ -181,6 +248,24 @@ That's it! You should see a JSON response with AI analysis of the input.
 - **Template Workflows** like `bike-insights` require JSON-formatted data with specific fields and are only available after running `ingen init`
 - The `bike-insights` workflow is the recommended "Hello World" example for new users
 
+## Next Steps: Creating Custom Workflows
+
+Once you have the basic setup working with the core workflows, you can create your own custom conversation flows:
+
+🚀 **[Create Custom Workflows →](docs/guides/custom-workflows.md)**
+
+Learn how to:
+- Build custom AI agents for your specific use cases
+- Implement multi-agent conversation patterns
+- Handle complex business logic and data processing
+- Deploy and test your custom workflows
+
+The custom workflow guide includes:
+- Step-by-step implementation examples
+- Complete working code samples (like a task management system)
+- Troubleshooting common issues
+- Best practices for production deployment
+
 ## Workflow Categories
 
 Insight Ingenious provides multiple conversation workflows with different configuration requirements:
@@ -188,9 +273,9 @@ Insight Ingenious provides multiple conversation workflows with different config
 ### Core Library Workflows (Always Available)
 These workflows are built into the Ingenious library and available immediately:
 
-- `classification-agent` - Simple text classification and routing to categories (minimal config required)
-- `knowledge-base-agent` - Search and retrieve information from knowledge bases (requires Azure Search or uses local ChromaDB by default)
-- `sql-manipulation-agent` - Execute SQL queries based on natural language (requires Azure SQL or uses local SQLite by default)
+- `classification-agent` - Simple text classification and routing to categories (works with any OpenAI-compatible API)
+- `knowledge-base-agent` - Search and retrieve information from knowledge bases (local ChromaDB for development, Azure AI Search for production)
+- `sql-manipulation-agent` - Execute SQL queries based on natural language (local SQLite for development, Azure SQL for production)
 
 > **Note**: Core workflows support both hyphenated (`classification-agent`) and underscored (`classification_agent`) naming formats for backward compatibility.
 
