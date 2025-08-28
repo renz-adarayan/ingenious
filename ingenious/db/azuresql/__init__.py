@@ -175,6 +175,7 @@ class azuresql_ChatHistoryRepository(BaseSQLRepository):
 
         columns = ", ".join(f"[{key}]" for key in parameters.keys())
         values = ", ".join("?" for key in parameters.keys())
+        # nosec B608: table name 'steps' is hardcoded constant, parameters use ? placeholders
         query = f"""
             INSERT INTO steps ({columns})
             VALUES ({values});
@@ -231,6 +232,7 @@ class azuresql_ChatHistoryRepository(BaseSQLRepository):
         updates = ", ".join(f"[{key}] = ?" for key in parameters.keys() if key != "id")
 
         # Use MERGE for upsert in SQL Server
+        # nosec B608: table name 'threads' is hardcoded constant, parameters use ? placeholders
         query = f"""
             MERGE threads AS target
             USING (SELECT ? as id) AS source ON target.id = source.id

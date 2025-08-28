@@ -196,6 +196,7 @@ class ConversationFlow(IConversationFlow):
             description=f"Execute SQL query on {database_type} with table '{table_name}' and columns: {', '.join(column_names)}",
         )
 
+        # nosec B608: database_type and table_name are validated before this function call
         system_message = f"""You are a SQL expert that helps write and execute SQL queries on data stored in {database_type}.
 
 {memory_context}IMPORTANT: If there is previous conversation context above, you MUST:

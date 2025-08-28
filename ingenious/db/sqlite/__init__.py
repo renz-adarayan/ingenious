@@ -177,7 +177,7 @@ class sqlite_ChatHistoryRepository(BaseSQLRepository):
             # Create parameterized placeholders for IN clause
             thread_ids_placeholders = ",".join("?" * len(thread_ids_list))
 
-        steps_feedbacks_query = f"""
+        steps_feedbacks_query = f"""  # nosec B608: table name 'steps' is hardcoded constant, parameters use ? placeholders
             SELECT
                 s."id" AS step_id,
                 s."name" AS step_name,
@@ -207,7 +207,7 @@ class sqlite_ChatHistoryRepository(BaseSQLRepository):
         """
         steps_feedbacks = self.execute_sql(steps_feedbacks_query, thread_ids_list)
 
-        elements_query = f"""
+        elements_query = f"""  # nosec B608: table name 'elements' is hardcoded constant, parameters use ? placeholders
             SELECT
                 e."id" AS element_id,
                 e."threadId" as element_threadid,
@@ -348,7 +348,7 @@ class sqlite_ChatHistoryRepository(BaseSQLRepository):
         parameters["generation"] = json.dumps(step_dict.get("generation", {}))
         columns = ", ".join(f'"{key}"' for key in parameters.keys())
         values = ", ".join("?" for key in parameters.keys())
-        query = f"""
+        query = f"""  # nosec B608: table name 'steps' is hardcoded constant, parameters use ? placeholders
             INSERT INTO steps ({columns})
             VALUES ({values});
         """
@@ -436,7 +436,7 @@ class sqlite_ChatHistoryRepository(BaseSQLRepository):
         updates = ", ".join(
             f'"{key}" = EXCLUDED."{key}"' for key in parameters.keys() if key != "id"
         )
-        query = f"""
+        query = f"""  # nosec B608: table name 'threads' is hardcoded constant, parameters use ? placeholders
             INSERT INTO threads ({columns})
             VALUES ({values})
             ON CONFLICT ("id") DO UPDATE

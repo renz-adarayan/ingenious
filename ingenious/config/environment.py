@@ -59,6 +59,7 @@ def create_minimal_config() -> "IngeniousSettings":
         ],
         logging=LoggingSettings(root_log_level="debug", log_level="debug"),
         web_configuration=WebSettings(
+            # nosec B104: binding to all interfaces needed for containerized deployment
             ip_address="0.0.0.0",
             port=8000,
             type="fastapi",

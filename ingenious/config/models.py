@@ -275,6 +275,7 @@ class WebSettings(BaseModel):
     """
 
     ip_address: str = Field(
+        # nosec B104: binding to all interfaces needed for containerized deployment
         "0.0.0.0",
         description="IP address to bind the web server (0.0.0.0 for all interfaces)",
     )
@@ -307,7 +308,7 @@ class LocalSqlSettings(BaseModel):
     """
 
     database_path: str = Field(
-        "/tmp/sample_sql_db", description="Path to local SQLite database file"
+        "./.tmp/sample_sql_db", description="Path to local SQLite database file"
     )
     sample_csv_path: str = Field(
         "", description="Path to sample CSV files for data loading"
