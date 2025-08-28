@@ -46,17 +46,6 @@ def sample_message_data():
 
 
 @pytest.fixture
-def mock_storage_client():
-    """Mock storage client for testing"""
-    mock_client = Mock()
-    mock_client.read_file = AsyncMock(return_value="mock file content")
-    mock_client.write_file = AsyncMock()
-    mock_client.delete_file = AsyncMock()
-    mock_client.list_files = Mock(return_value=["file1.txt", "file2.txt"])
-    return mock_client
-
-
-@pytest.fixture
 def mock_chat_history_repo():
     """Mock chat history repository for testing"""
     mock_repo = Mock()
