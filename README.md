@@ -5,7 +5,7 @@
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Insight-Services-APAC/ingenious)
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
 
-Ingenious is a tool for quickly setting up APIs to interact with AI Agents. It features multi-agent conversation flows using Microsoft's AutoGen, JWT authentication, and works locally with minimal dependencies. Azure service integrations are optional and can be added as needed.
+Ingenious is a tool for quickly setting up APIs to interact with AI Agents. It features multi-agent conversation flows using Microsoft's AutoGen, JWT authentication, and supports both local development (SQLite, ChromaDB) and production Azure deployments (Azure SQL, Cosmos DB, Azure AI Search, Azure Blob, Container Apps).
 
 ## Quick Start
 
@@ -16,7 +16,7 @@ Get up and running in 5 minutes with just an OpenAI API key!
 - OpenAI or Azure OpenAI API credentials
 - [uv package manager](https://docs.astral.sh/uv/)
 
-**Local-First Approach**: Ingenious works with just an OpenAI key + local storage (SQLite, ChromaDB). Azure services are optional upgrades.
+**Flexible Architecture**: Ingenious supports both local development (SQLite, ChromaDB) and production Azure deployments (Azure SQL, Cosmos DB, Azure AI Search, Azure Blob, Container Apps). Start local, scale to Azure as needed.
 
 ### AI-Assisted Set Up (give this prompt to your preferred coding agent)
 
@@ -78,13 +78,13 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
     INGENIOUS_CHAT_HISTORY__DATABASE_PATH=./.tmp/chat_history.db
     INGENIOUS_CHAT_HISTORY__MEMORY_PATH=./.tmp
 
-    # Local knowledge base (ChromaDB) - automatically used for knowledge-base-agent
+    # Knowledge base configuration - local ChromaDB for development (Azure AI Search available for production)
     KB_POLICY=local_only
     KB_TOPK_DIRECT=3
     KB_TOPK_ASSIST=5
     KB_MODE=direct
 
-    # Local SQL database for sql-manipulation-agent
+    # SQL database configuration - local SQLite for development (Azure SQL available for production)
     INGENIOUS_LOCAL_SQL_DB__DATABASE_PATH=./.tmp/sample_sql.db
 
     # Optional: Authentication settings (disabled by default for local development)
@@ -95,6 +95,8 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
     ```bash
     uv run ingen validate  # Check configuration before starting
     ```
+
+    **Expected validation output**: You should see confirmation that your configuration is valid and a count of available workflows (typically showing 4/4 workflows working: classification-agent, knowledge-base-agent, sql-manipulation-agent, and bike-insights after `ingen init`).
 
     **If validation fails with port conflicts**:
     ```bash
@@ -131,6 +133,15 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
     curl http://localhost:8000/api/v1/health
     ```
 
+    **Expected health response**: A JSON response indicating server status and available workflows:
+    ```json
+    {
+      "status": "healthy",
+      "message": "Service is running",
+      "workflows": ["classification-agent", "knowledge-base-agent", "sql-manipulation-agent", "bike-insights"]
+    }
+    ```
+
 6. **Test with Core Workflows**:
 
     Create test files to avoid JSON escaping issues:
@@ -146,10 +157,50 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
     curl -X POST http://localhost:8000/api/v1/chat -H "Content-Type: application/json" -d @test_sql.json
     ```
 
+    **To populate knowledge base for testing** (optional but recommended):
+    ```bash
+    # Create sample knowledge base document for testing
+    mkdir -p .tmp/knowledge_base
+    cat > .tmp/knowledge_base/setup_guide.md << 'EOF'
+    # Ingenious Setup Guide
+
+    ## Quick Setup Instructions
+
+    Ingenious is a multi-agent AI framework that allows you to quickly set up APIs for AI agents.
+
+    ### Prerequisites
+    - Python 3.13+
+    - OpenAI API key or Azure OpenAI credentials
+    - UV package manager
+
+    ### Installation Steps
+    1. Initialize UV project: `uv init`
+    2. Install Ingenious: `uv add "ingenious[azure-full]"`
+    3. Initialize project: `uv run ingen init`
+    4. Configure environment variables in .env file
+    5. Start server: `uv run ingen serve --port 8000`
+    EOF
+
+    # Now test knowledge-base-agent again to see populated results
+    curl -X POST http://localhost:8000/api/v1/chat -H "Content-Type: application/json" -d @test_knowledge.json
+    ```
+
 **Expected Responses**:
-- **Successful classification-agent response**: JSON with message analysis and categories
-- **Successful knowledge-base-agent response**: JSON with relevant information retrieved (may indicate empty knowledge base initially)
-- **Successful sql-manipulation-agent response**: JSON with query results or confirmation
+- **Successful classification-agent response**: JSON with message analysis, sentiment scores, and topic categorization
+- **Successful knowledge-base-agent response**: JSON with relevant information retrieved from local ChromaDB (with sample document, will contain setup instructions; without, may indicate empty knowledge base)
+- **Successful sql-manipulation-agent response**: JSON with SQL query results showing database table information from local SQLite database
+
+**Example successful responses**:
+```bash
+# classification-agent typical response format:
+{"response": "Analysis: Positive sentiment (0.8/1.0)... Category: Product Feedback"}
+
+# knowledge-base-agent with populated knowledge base:
+{"response": "Based on the setup guide: Ingenious requires Python 3.13+..."}
+
+# sql-manipulation-agent typical response:
+{"response": "Found 3 tables in database: users, products, orders..."}
+```
 
 **If you see error responses**, check the troubleshooting section above or the detailed [troubleshooting guide](docs/getting-started/troubleshooting.md).
 
@@ -204,9 +255,9 @@ Insight Ingenious provides multiple conversation workflows with different config
 ### Core Library Workflows (Always Available)
 These workflows are built into the Ingenious library and available immediately:
 
-- `classification-agent` - Simple text classification and routing to categories (works immediately with any OpenAI-compatible API)
-- `knowledge-base-agent` - Search and retrieve information from knowledge bases (uses local ChromaDB by default, Azure Search optional)
-- `sql-manipulation-agent` - Execute SQL queries based on natural language (uses local SQLite with sample data by default, Azure SQL optional)
+- `classification-agent` - Simple text classification and routing to categories (works with any OpenAI-compatible API)
+- `knowledge-base-agent` - Search and retrieve information from knowledge bases (local ChromaDB for development, Azure AI Search for production)
+- `sql-manipulation-agent` - Execute SQL queries based on natural language (local SQLite for development, Azure SQL for production)
 
 > **Note**: Core workflows support both hyphenated (`classification-agent`) and underscored (`classification_agent`) naming formats for backward compatibility.
 
