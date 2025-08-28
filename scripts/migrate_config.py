@@ -95,7 +95,7 @@ def get_setting_description(key: str) -> str:
     """
     descriptions = {
         "INGENIOUS_PROFILE": "Profile name for environment-specific settings",
-        "INGENIOUS_MODELS__0__MODEL": "AI model name (e.g., 'gpt-4.1-nano', 'gpt-3.5-turbo')",
+        "INGENIOUS_MODELS__0__MODEL": "AI model name (e.g., 'gpt-4o-mini', 'gpt-3.5-turbo')",
         "INGENIOUS_MODELS__0__API_KEY": "API key for the AI model service",
         "INGENIOUS_MODELS__0__BASE_URL": "Base URL for the AI model API",
         "INGENIOUS_MODELS__0__API_VERSION": "API version for Azure OpenAI",
