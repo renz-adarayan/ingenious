@@ -4631,15 +4631,11 @@ name = "test-dir"
 version = "0.1.0"
 source = { virtual = "test_dir" }
 dependencies = [
-    { name = "chromadb" },
     { name = "ingenious", extra = ["azure-full"] },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "chromadb", specifier = ">=1.0.11" },
-    { name = "ingenious", extras = ["azure-full"], editable = "." },
-]
+requires-dist = [{ name = "ingenious", extras = ["azure-full"], editable = "." }]
 
 [[package]]
 name = "threadpoolctl"
