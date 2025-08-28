@@ -123,6 +123,17 @@ class multi_agent_chat_service:
         # Process thread messages
         await self._process_thread_messages(chat_request, thread_messages)
 
+        # Load and execute the conversation flow
+        conversation_flow_class = self._load_conversation_flow_class(chat_request)
+        agent_response = await self._execute_conversation_flow(
+            conversation_flow_class, chat_request
+        )
+
+        # Save chat history if enabled
+        await self._save_chat_history(chat_request, agent_response)
+
+        return agent_response
+
     def _load_conversation_flow_class(self, chat_request: IChatRequest) -> Any:
         """Load the conversation flow class dynamically."""
         # Ensure conversation flow is set

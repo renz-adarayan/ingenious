@@ -44,7 +44,7 @@ class ModelSettings(BaseModel):
     """
 
     model: str = Field(
-        ..., description="Model name (e.g., 'gpt-4.1-nano', 'gpt-3.5-turbo')"
+        ..., description="Model name (e.g., 'gpt-4o-mini', 'gpt-3.5-turbo')"
     )
     api_type: str = Field("rest", description="API type: 'rest' for HTTP APIs")
     api_version: str = Field(

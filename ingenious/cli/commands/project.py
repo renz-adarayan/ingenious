@@ -162,7 +162,7 @@ class InitCommand(BaseCommand):
 INGENIOUS_MODELS__0__API_KEY=your-api-key-here
 # Base URL for Azure OpenAI (e.g., https://your-resource.openai.azure.com/)
 INGENIOUS_MODELS__0__BASE_URL=https://your-resource.openai.azure.com/
-# Model name (e.g., gpt-4o-mini, gpt-4.1-nano, gpt-3.5-turbo)
+# Model name (e.g., gpt-4o-mini, gpt-4, gpt-3.5-turbo)
 INGENIOUS_MODELS__0__MODEL=gpt-4o-mini
 # Azure OpenAI API version
 INGENIOUS_MODELS__0__API_VERSION=2024-02-01

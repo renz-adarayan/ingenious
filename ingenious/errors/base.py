@@ -789,9 +789,35 @@ def handle_exception(
 
     error_class = error_mapping.get(type(exc), IngeniousError)
 
-    context = ErrorContext(
-        operation=operation, component=component, **context_kwargs
-    ).with_stack_trace()
+    # Separate known ErrorContext fields from additional metadata
+    context_fields = {
+        "operation": operation,
+        "component": component,
+    }
+
+    # Add valid ErrorContext fields if they exist in context_kwargs
+    valid_fields = {
+        "correlation_id",
+        "request_id",
+        "user_id",
+        "session_id",
+        "workflow",
+        "service",
+        "timestamp",
+        "stack_trace",
+    }
+
+    metadata = {}
+    for key, value in context_kwargs.items():
+        if key in valid_fields:
+            context_fields[key] = value
+        else:
+            metadata[key] = value
+
+    if metadata:
+        context_fields["metadata"] = metadata
+
+    context = ErrorContext(**context_fields).with_stack_trace()
 
     return error_class(message=str(exc), cause=exc, context=context)  # type: ignore
 

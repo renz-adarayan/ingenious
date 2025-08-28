@@ -47,14 +47,14 @@ def create_minimal_config() -> "IngeniousSettings":
     return IngeniousSettings(
         models=[
             ModelSettings(
-                model="gpt-4.1-nano",
+                model="gpt-4o-mini",
                 api_type="rest",
                 api_version="2023-03-15-preview",
                 api_key=os.getenv("AZURE_OPENAI_API_KEY", "test-api-key"),
                 base_url=os.getenv(
                     "AZURE_OPENAI_BASE_URL", "https://test.openai.azure.com/"
                 ),
-                deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4.1-nano"),
+                deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini"),
             )
         ],
         logging=LoggingSettings(root_log_level="debug", log_level="debug"),
