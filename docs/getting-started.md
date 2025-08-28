@@ -7,7 +7,7 @@ Get up and running in 5 minutes with just an OpenAI API key!
 - OpenAI or Azure OpenAI API credentials
 - [uv package manager](https://docs.astral.sh/uv/)
 
-**Local-First Approach**: Ingenious works with just an OpenAI key + local storage (SQLite, ChromaDB). Azure services are optional upgrades.
+**Flexible Architecture**: Ingenious supports both local development (SQLite, ChromaDB) and production Azure deployments (Azure SQL, Cosmos DB, Azure AI Search, Azure Blob, Container Apps). Start local, scale to Azure as needed.
 
 ### AI-Assisted Set Up (give this prompt to your preferred coding agent)
 
@@ -69,13 +69,13 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
     INGENIOUS_CHAT_HISTORY__DATABASE_PATH=./.tmp/chat_history.db
     INGENIOUS_CHAT_HISTORY__MEMORY_PATH=./.tmp
 
-    # Local knowledge base (ChromaDB) - automatically used for knowledge-base-agent
+    # Knowledge base configuration - local ChromaDB for development (Azure AI Search available for production)
     KB_POLICY=local_only
     KB_TOPK_DIRECT=3
     KB_TOPK_ASSIST=5
     KB_MODE=direct
 
-    # Local SQL database for sql-manipulation-agent
+    # SQL database configuration - local SQLite for development (Azure SQL available for production)
     INGENIOUS_LOCAL_SQL_DB__DATABASE_PATH=./.tmp/sample_sql.db
 
     # Optional: Authentication settings (disabled by default for local development)
@@ -195,9 +195,9 @@ Insight Ingenious provides multiple conversation workflows with different config
 ### Core Library Workflows (Always Available)
 These workflows are built into the Ingenious library and available immediately:
 
-- `classification-agent` - Simple text classification and routing to categories (works immediately with any OpenAI-compatible API)
-- `knowledge-base-agent` - Search and retrieve information from knowledge bases (uses local ChromaDB by default, Azure Search optional)
-- `sql-manipulation-agent` - Execute SQL queries based on natural language (uses local SQLite with sample data by default, Azure SQL optional)
+- `classification-agent` - Simple text classification and routing to categories (works with any OpenAI-compatible API)
+- `knowledge-base-agent` - Search and retrieve information from knowledge bases (local ChromaDB for development, Azure AI Search for production)
+- `sql-manipulation-agent` - Execute SQL queries based on natural language (local SQLite for development, Azure SQL for production)
 
 > **Note**: Core workflows support both hyphenated (`classification-agent`) and underscored (`classification_agent`) naming formats for backward compatibility.
 
