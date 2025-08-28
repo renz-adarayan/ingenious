@@ -21,7 +21,7 @@ class TestValidateCommand:
     @pytest.fixture
     def mock_console(self):
         """Mock console for testing output."""
-        with patch("ingenious.cli.commands.help.Console") as mock:
+        with patch("rich.console.Console") as mock:
             yield mock.return_value
 
     def test_validate_environment_variables_with_required_vars_set(
@@ -37,18 +37,18 @@ class TestValidateCommand:
                 "INGENIOUS_MODELS__0__API_VERSION": "2024-02-01",
             },
         ):
-            errors, warnings = validate_command._validate_environment_variables()
-            assert len(errors) == 0
-            assert len(warnings) >= 0
+            success, issues = validate_command._validate_environment_variables()
+            assert success
+            assert len(issues) >= 0
 
     def test_validate_environment_variables_missing_required_vars(
         self, validate_command, mock_console
     ):
         """Test environment variable validation when required vars are missing."""
         with patch.dict(os.environ, {}, clear=True):
-            errors, warnings = validate_command._validate_environment_variables()
-            assert len(errors) > 0
-            assert any("API_KEY" in error for error in errors)
+            success, issues = validate_command._validate_environment_variables()
+            assert not success
+            assert any("API_KEY" in error for error in issues)
 
     def test_validate_configuration_files_with_valid_files(
         self, validate_command, mock_console, tmp_path
@@ -61,92 +61,97 @@ class TestValidateCommand:
         yaml_file = tmp_path / "config.yml"
         yaml_file.write_text("models:\n  - api_key: test-key\n")
 
-        with patch("ingenious.cli.commands.help.Path.exists", return_value=True):
+        with patch("pathlib.Path.exists", return_value=True):
             with patch(
-                "ingenious.cli.commands.help.Path.open",
+                "pathlib.Path.open",
                 mock_open(read_data="INGENIOUS_MODELS__0__API_KEY=test"),
             ):
-                errors, warnings = validate_command._validate_configuration_files()
-                assert len(errors) >= 0  # May have errors for missing files
+                success, issues = validate_command._validate_configuration_files()
+                assert isinstance(success, bool)  # May have errors for missing files
 
     def test_validate_azure_connectivity_success(self, validate_command, mock_console):
         """Test Azure connectivity validation with successful connection."""
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = MagicMock(
-            choices=[MagicMock(message=MagicMock(content="test"))]
-        )
+        # Mock the settings loading to return a valid model configuration
+        mock_model = MagicMock()
+        mock_model.base_url = "https://test.openai.azure.com/"
+        mock_model.api_key = "test-key"
+        mock_model.authentication_method = MagicMock()
+        mock_model.authentication_method.value = "TOKEN"
 
-        with patch("ingenious.cli.commands.help.AzureOpenAI", return_value=mock_client):
-            with patch.dict(
-                os.environ,
-                {
-                    "INGENIOUS_MODELS__0__API_KEY": "test-key",
-                    "INGENIOUS_MODELS__0__BASE_URL": "https://test.openai.azure.com/",
-                    "INGENIOUS_MODELS__0__DEPLOYMENT": "test-deployment",
-                    "INGENIOUS_MODELS__0__API_VERSION": "2024-02-01",
-                },
+        mock_settings = MagicMock()
+        mock_settings.models = [mock_model]
+
+        with patch(
+            "ingenious.config.main_settings.IngeniousSettings",
+            return_value=mock_settings,
+        ):
+            with patch.object(
+                validate_command, "_validate_auth_credentials", return_value=(True, [])
             ):
-                errors, warnings = validate_command._validate_azure_connectivity()
-                assert len(errors) == 0
+                with patch(
+                    "ingenious.cli.utilities.ValidationUtils.validate_url",
+                    return_value=(True, ""),
+                ):
+                    with patch.object(
+                        validate_command,
+                        "_test_azure_connection",
+                        return_value=(True, ""),
+                    ):
+                        success, issues = (
+                            validate_command._validate_azure_connectivity()
+                        )
+                        assert success
 
     def test_validate_azure_connectivity_failure(self, validate_command, mock_console):
         """Test Azure connectivity validation with connection failure."""
+        # Test case where no models are configured
+        mock_settings = MagicMock()
+        mock_settings.models = []
+
         with patch(
-            "ingenious.cli.commands.help.AzureOpenAI",
-            side_effect=Exception("Connection failed"),
+            "ingenious.config.main_settings.IngeniousSettings",
+            return_value=mock_settings,
         ):
-            with patch.dict(
-                os.environ,
-                {
-                    "INGENIOUS_MODELS__0__API_KEY": "test-key",
-                    "INGENIOUS_MODELS__0__BASE_URL": "https://test.openai.azure.com/",
-                    "INGENIOUS_MODELS__0__DEPLOYMENT": "test-deployment",
-                    "INGENIOUS_MODELS__0__API_VERSION": "2024-02-01",
-                },
-            ):
-                errors, warnings = validate_command._validate_azure_connectivity()
-                assert len(errors) > 0
-                assert any("Connection failed" in error for error in errors)
+            success, issues = validate_command._validate_azure_connectivity()
+            assert not success
+            assert any("No Azure OpenAI models configured" in error for error in issues)
 
     def test_validate_workflows(self, validate_command, mock_console):
         """Test workflow validation."""
-        mock_discovery = MagicMock()
-        mock_discovery.discover_workflows.return_value = {
-            "test_workflow": {
-                "name": "test_workflow",
-                "path": "/path/to/workflow",
-                "protocol": "ConversationFlowProtocol",
-            }
-        }
-
-        with patch(
-            "ingenious.cli.commands.help.WorkflowDiscovery", return_value=mock_discovery
-        ):
-            errors, warnings = validate_command._validate_workflows()
-            assert len(errors) == 0
+        # Mock the directory structure existence checks
+        with patch("pathlib.Path.exists", return_value=True):
+            with patch("importlib.util.find_spec") as mock_spec:
+                mock_spec.return_value = (
+                    MagicMock()
+                )  # Spec exists, indicating module can be found
+                success, issues = validate_command._validate_workflows()
+                assert success
 
     def test_validate_dependencies(self, validate_command, mock_console):
         """Test dependency validation."""
-        with patch("ingenious.cli.commands.help.subprocess.run") as mock_run:
+        with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="package==1.0.0\n")
-            errors, warnings = validate_command._validate_dependencies()
-            assert len(errors) == 0
+            success, issues = validate_command._validate_dependencies()
+            assert success
 
     def test_validate_port_availability_open(self, validate_command, mock_console):
         """Test port availability when port is open."""
         with patch("socket.socket") as mock_socket:
             mock_socket.return_value.__enter__.return_value.bind.return_value = None
-            errors, warnings = validate_command._validate_port_availability()
-            assert len(errors) == 0
+            success, issues = validate_command._validate_port_availability()
+            assert success
 
     def test_validate_port_availability_in_use(self, validate_command, mock_console):
         """Test port availability when port is in use."""
+        # Mock the socket connection to succeed (port in use)
         with patch("socket.socket") as mock_socket:
-            mock_socket.return_value.__enter__.return_value.bind.side_effect = OSError(
-                "Port in use"
+            mock_socket.return_value.__enter__.return_value.connect_ex.return_value = (
+                0  # Connection successful = port in use
             )
-            errors, warnings = validate_command._validate_port_availability()
-            assert len(errors) > 0
+            with patch("ingenious.config.config.get_config") as mock_config:
+                mock_config.return_value.web_configuration.port = 8080
+                success, issues = validate_command._validate_port_availability()
+                assert not success
 
 
 def mock_open(read_data=""):

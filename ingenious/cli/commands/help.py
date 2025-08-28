@@ -15,6 +15,7 @@ from rich.panel import Panel
 from ingenious.cli.base import BaseCommand, CommandError, ExitCode
 from ingenious.cli.utilities import OutputFormatters, ValidationUtils
 from ingenious.common.enums import AuthenticationMethod
+from ingenious.config.models import ModelSettings
 
 
 class HelpCommand(BaseCommand):
@@ -358,7 +359,9 @@ class ValidateCommand(BaseCommand):
             )
         return env_file_found
 
-    def _validate_auth_method(self, first_model, auth_method) -> tuple[bool, str]:
+    def _validate_auth_method(
+        self, first_model: ModelSettings, auth_method: AuthenticationMethod
+    ) -> tuple[bool, str]:
         """Validate authentication method specific requirements."""
         auth_validators = {
             AuthenticationMethod.DEFAULT_CREDENTIAL: self._validate_default_credential,
@@ -370,32 +373,32 @@ class ValidateCommand(BaseCommand):
         validator = auth_validators.get(auth_method, self._validate_default_credential)
         return validator(first_model)
 
-    def _validate_default_credential(self, model) -> tuple[bool, str]:
+    def _validate_default_credential(self, model: ModelSettings) -> tuple[bool, str]:
         """Validate default credential authentication."""
         return (
             True,
             "default_credential authentication (no additional credentials required)",
         )
 
-    def _validate_msi(self, model) -> tuple[bool, str]:
+    def _validate_msi(self, model: ModelSettings) -> tuple[bool, str]:
         """Validate MSI authentication."""
         if not model.client_id:
             return False, ""
         return True, "MSI authentication with client_id"
 
-    def _validate_token(self, model) -> tuple[bool, str]:
+    def _validate_token(self, model: ModelSettings) -> tuple[bool, str]:
         """Validate token authentication."""
         if not model.api_key:
             return False, ""
         return True, "token authentication with API key"
 
-    def _validate_client_secret(self, model) -> tuple[bool, str]:
+    def _validate_client_secret(self, model: ModelSettings) -> tuple[bool, str]:
         """Validate client ID and secret authentication."""
         if not model.client_id or not model.client_secret:
             return False, ""
         return True, "client_id_and_secret authentication"
 
-    def _get_base_missing_fields(self, model) -> list[str]:
+    def _get_base_missing_fields(self, model: ModelSettings) -> list[str]:
         """Get missing base fields."""
         missing = []
         if not model.base_url:
@@ -404,7 +407,9 @@ class ValidateCommand(BaseCommand):
             missing.append("model")
         return missing
 
-    def _get_auth_missing_fields(self, model, auth_method) -> list[str]:
+    def _get_auth_missing_fields(
+        self, model: ModelSettings, auth_method: AuthenticationMethod
+    ) -> list[str]:
         """Get missing authentication-specific fields."""
         auth_field_checkers = {
             AuthenticationMethod.MSI: self._check_msi_fields,
@@ -417,19 +422,19 @@ class ValidateCommand(BaseCommand):
             return checker(model)
         return []
 
-    def _check_msi_fields(self, model) -> list[str]:
+    def _check_msi_fields(self, model: ModelSettings) -> list[str]:
         """Check MSI authentication fields."""
         if not model.client_id:
             return ["client_id (required for MSI authentication)"]
         return []
 
-    def _check_token_fields(self, model) -> list[str]:
+    def _check_token_fields(self, model: ModelSettings) -> list[str]:
         """Check token authentication fields."""
         if not model.api_key:
             return ["api_key (required for TOKEN authentication)"]
         return []
 
-    def _check_client_secret_fields(self, model) -> list[str]:
+    def _check_client_secret_fields(self, model: ModelSettings) -> list[str]:
         """Check client secret authentication fields."""
         missing = []
         if not model.client_id:
@@ -446,7 +451,9 @@ class ValidateCommand(BaseCommand):
             )
         return missing
 
-    def _get_missing_fields(self, first_model, auth_method) -> list[str]:
+    def _get_missing_fields(
+        self, first_model: ModelSettings, auth_method: AuthenticationMethod
+    ) -> list[str]:
         """Get list of missing required fields based on auth method."""
         missing_fields = self._get_base_missing_fields(first_model)
         missing_fields.extend(self._get_auth_missing_fields(first_model, auth_method))
@@ -515,7 +522,7 @@ class ValidateCommand(BaseCommand):
             issues.append(f"Environment setup: {e}")
             return False, issues
 
-    def _validate_model_config(self, model) -> tuple[bool, list[str]]:
+    def _validate_model_config(self, model: ModelSettings) -> tuple[bool, list[str]]:
         """Validate a single model configuration."""
         auth_method = model.authentication_method
 
@@ -632,7 +639,9 @@ class ValidateCommand(BaseCommand):
 
         return success, issues
 
-    def _validate_auth_credentials(self, model) -> tuple[bool, list[str]]:
+    def _validate_auth_credentials(
+        self, model: ModelSettings
+    ) -> tuple[bool, list[str]]:
         """Validate authentication credentials for connectivity."""
         issues = []
         auth_method = model.authentication_method
