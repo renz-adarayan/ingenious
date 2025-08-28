@@ -248,6 +248,24 @@ That's it! You should see a JSON response with AI analysis of the input.
 - **Template Workflows** like `bike-insights` require JSON-formatted data with specific fields and are only available after running `ingen init`
 - The `bike-insights` workflow is the recommended "Hello World" example for new users
 
+## Next Steps: Creating Custom Workflows
+
+Once you have the basic setup working with the core workflows, you can create your own custom conversation flows:
+
+🚀 **[Create Custom Workflows →](docs/guides/custom-workflows.md)**
+
+Learn how to:
+- Build custom AI agents for your specific use cases
+- Implement multi-agent conversation patterns
+- Handle complex business logic and data processing
+- Deploy and test your custom workflows
+
+The custom workflow guide includes:
+- Step-by-step implementation examples
+- Complete working code samples (like a task management system)
+- Troubleshooting common issues
+- Best practices for production deployment
+
 ## Workflow Categories
 
 Insight Ingenious provides multiple conversation workflows with different configuration requirements:
