@@ -23,18 +23,6 @@ def mock_azure_openai():
 
 
 @pytest.fixture
-def mock_file_system():
-    """Mock file system operations"""
-    with (
-        patch("pathlib.Path.exists"),
-        patch("pathlib.Path.read_text"),
-        patch("pathlib.Path.write_text"),
-        patch("builtins.open"),
-    ):
-        yield
-
-
-@pytest.fixture
 def sample_config_data():
     """Sample configuration data for testing"""
     return {
