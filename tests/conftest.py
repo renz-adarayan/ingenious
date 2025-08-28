@@ -14,18 +14,6 @@ def mock_env():
 
 
 @pytest.fixture
-def sample_env_vars():
-    """Sample environment variables for testing"""
-    return {
-        "TEST_VAR": "test_value",
-        "AZURE_OPENAI_ENDPOINT": "https://test.openai.azure.com/",
-        "AZURE_OPENAI_API_KEY": "test_key",
-        "AZURE_OPENAI_API_VERSION": "2023-03-15-preview",
-        "AZURE_OPENAI_DEPLOYMENT_NAME": "gpt-4.1-nano",
-    }
-
-
-@pytest.fixture
 def mock_azure_openai():
     """Mock Azure OpenAI client"""
     with patch("ingenious.external_services.openai_service.AzureOpenAI") as mock_client:
