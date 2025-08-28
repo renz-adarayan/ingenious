@@ -14,14 +14,14 @@ class TestAgent:
         """Test Agent initialization with basic parameters."""
         agent = Agent(
             agent_name="test_agent",
-            agent_model_name="gpt-4.1-nano",
+            agent_model_name="gpt-4o-mini",
             agent_display_name="Test Agent",
             agent_description="Test agent description",
             agent_type="test",
         )
         assert agent.agent_name == "test_agent"
         assert agent.agent_description == "Test agent description"
-        assert agent.agent_model_name == "gpt-4.1-nano"
+        assert agent.agent_model_name == "gpt-4o-mini"
         assert agent.agent_display_name == "Test Agent"
         assert agent.agent_type == "test"
 
@@ -29,7 +29,7 @@ class TestAgent:
         """Test that agent_chats defaults to empty list."""
         agent = Agent(
             agent_name="test_agent",
-            agent_model_name="gpt-4.1-nano",
+            agent_model_name="gpt-4o-mini",
             agent_display_name="Test Agent",
             agent_description="Test agent description",
             agent_type="test",
@@ -40,7 +40,7 @@ class TestAgent:
         """Test that optional fields have correct defaults."""
         agent = Agent(
             agent_name="test_agent",
-            agent_model_name="gpt-4.1-nano",
+            agent_model_name="gpt-4o-mini",
             agent_display_name="Test Agent",
             agent_description="Test agent description",
             agent_type="test",
@@ -62,14 +62,14 @@ class TestAgents:
         # Create mock config with models
         mock_config = Mock(spec=Config)
         mock_model1 = Mock()
-        mock_model1.model = "gpt-4.1-nano"
+        mock_model1.model = "gpt-4o-mini"
         mock_model2 = Mock()
         mock_model2.model = "gpt-3.5"
         mock_config.models = [mock_model1, mock_model2]
 
         agent1 = Agent(
             agent_name="agent1",
-            agent_model_name="gpt-4.1-nano",
+            agent_model_name="gpt-4o-mini",
             agent_display_name="Agent 1",
             agent_description="Agent 1",
             agent_type="test",
@@ -92,12 +92,12 @@ class TestAgents:
 
         mock_config = Mock(spec=Config)
         mock_model = Mock()
-        mock_model.model = "gpt-4.1-nano"
+        mock_model.model = "gpt-4o-mini"
         mock_config.models = [mock_model]
 
         agent = Agent(
             agent_name="test_agent",
-            agent_model_name="gpt-4.1-nano",
+            agent_model_name="gpt-4o-mini",
             agent_display_name="Test Agent",
             agent_description="Test agent",
             agent_type="test",

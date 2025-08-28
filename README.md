@@ -5,16 +5,18 @@
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Insight-Services-APAC/ingenious)
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
 
-Ingenious is a tool for quickly setting up APIs to interact with AI Agents. It features multi-agent conversation flows using Microsoft's AutoGen, JWT authentication, and comprehensive Azure service integrations.
+Ingenious is a tool for quickly setting up APIs to interact with AI Agents. It features multi-agent conversation flows using Microsoft's AutoGen, JWT authentication, and works locally with minimal dependencies. Azure service integrations are optional and can be added as needed.
 
 ## Quick Start
 
-Get up and running in 5 minutes with Azure OpenAI!
+Get up and running in 5 minutes with just an OpenAI API key!
 
 ### Prerequisites
 - Python 3.13 or higher (required - earlier versions are not supported)
-- Azure OpenAI API credentials
+- OpenAI or Azure OpenAI API credentials
 - [uv package manager](https://docs.astral.sh/uv/)
+
+**Local-First Approach**: Ingenious works with just an OpenAI key + local storage (SQLite, ChromaDB). Azure services are optional upgrades.
 
 ### AI-Assisted Set Up (give this prompt to your preferred coding agent)
 
@@ -59,12 +61,16 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
     **Required configuration (add to .env file)**:
     ```bash
     # Model Configuration (only INGENIOUS_* variables are used by the system)
-    INGENIOUS_MODELS__0__MODEL=gpt-4.1-nano
+    INGENIOUS_MODELS__0__MODEL=gpt-4o-mini
     INGENIOUS_MODELS__0__API_TYPE=rest
     INGENIOUS_MODELS__0__API_VERSION=2024-12-01-preview
-    INGENIOUS_MODELS__0__DEPLOYMENT=your-gpt4.1-nano-deployment-name
+    INGENIOUS_MODELS__0__DEPLOYMENT=gpt-4o-mini
     INGENIOUS_MODELS__0__API_KEY=your-actual-api-key-here
     INGENIOUS_MODELS__0__BASE_URL=https://your-resource.openai.azure.com/
+
+    # For OpenAI (not Azure), use:
+    # INGENIOUS_MODELS__0__BASE_URL=https://api.openai.com/v1
+    # INGENIOUS_MODELS__0__API_VERSION=2024-02-01
 
     # Basic required settings
     INGENIOUS_CHAT_SERVICE__TYPE=multi_agent
@@ -72,8 +78,17 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
     INGENIOUS_CHAT_HISTORY__DATABASE_PATH=./.tmp/chat_history.db
     INGENIOUS_CHAT_HISTORY__MEMORY_PATH=./.tmp
 
-    # Optional: Authentication settings (enabled by default)
-    # INGENIOUS_WEB_CONFIGURATION__ENABLE_AUTHENTICATION=false  # To disable auth
+    # Local knowledge base (ChromaDB) - automatically used for knowledge-base-agent
+    KB_POLICY=local_only
+    KB_TOPK_DIRECT=3
+    KB_TOPK_ASSIST=5
+    KB_MODE=direct
+
+    # Local SQL database for sql-manipulation-agent
+    INGENIOUS_LOCAL_SQL_DB__DATABASE_PATH=./.tmp/sample_sql.db
+
+    # Optional: Authentication settings (disabled by default for local development)
+    INGENIOUS_WEB_CONFIGURATION__AUTHENTICATION__ENABLE=false
     ```
 
 3. **Validate Configuration**:
@@ -102,11 +117,12 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
     # Start server on port 8000 (recommended for development)
     uv run ingen serve --port 8000
 
+    # For knowledge-base-agent, ensure local ChromaDB policy is set:
+    KB_POLICY=local_only uv run ingen serve --port 8000
+
     # Additional options:
     # --host 0.0.0.0         # Bind host (default: 0.0.0.0)
     # --port                 # Port to bind (default: 80 or $WEB_PORT env var)
-    # --config config.yml    # Legacy config file (deprecated - use environment variables)
-    # --profile production   # Legacy profile (deprecated - use environment variables)
     ```
 
 5. **Verify Health**:
@@ -188,9 +204,9 @@ Insight Ingenious provides multiple conversation workflows with different config
 ### Core Library Workflows (Always Available)
 These workflows are built into the Ingenious library and available immediately:
 
-- `classification-agent` - Simple text classification and routing to categories (minimal config required)
-- `knowledge-base-agent` - Search and retrieve information from knowledge bases (requires Azure Search or uses local ChromaDB by default)
-- `sql-manipulation-agent` - Execute SQL queries based on natural language (requires Azure SQL or uses local SQLite by default)
+- `classification-agent` - Simple text classification and routing to categories (works immediately with any OpenAI-compatible API)
+- `knowledge-base-agent` - Search and retrieve information from knowledge bases (uses local ChromaDB by default, Azure Search optional)
+- `sql-manipulation-agent` - Execute SQL queries based on natural language (uses local SQLite with sample data by default, Azure SQL optional)
 
 > **Note**: Core workflows support both hyphenated (`classification-agent`) and underscored (`classification_agent`) naming formats for backward compatibility.
 
