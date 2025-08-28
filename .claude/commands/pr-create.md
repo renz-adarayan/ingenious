@@ -1,4 +1,4 @@
-use gh cli to create a pr with the remote branch to-stable-2
+use gh cli to create a pr with the remote branch to-stable
 
 **IMPORTANT**: When creating pull requests, ensure that:
 - Do NOT enable squash merging
