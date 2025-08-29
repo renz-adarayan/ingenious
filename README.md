@@ -47,6 +47,8 @@ Set up ingenious locally first and then migrate to Azure services as shown in th
     uv add "ingenious[azure-full]" # Recommended: Full Azure integration (core, auth, azure, ai, database, ui)
     # OR
     uv add "ingenious[standard]" # for local testing: includes SQL agent support (core, auth, ai, database)
+    # OR for nightly builds
+    uv add --index-url https://test.pypi.org/simple/ "ingenious[azure-full]"
 
     # Initialize project in the current directory
     uv run ingen init
