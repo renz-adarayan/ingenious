@@ -68,8 +68,9 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
     INGENIOUS_MODELS__0__API_KEY=your-actual-api-key-here
     INGENIOUS_MODELS__0__BASE_URL=https://eastus.api.cognitive.microsoft.com/
 
-    # For Azure OpenAI: Use the cognitive services endpoint format
-    # INGENIOUS_MODELS__0__BASE_URL=https://eastus.api.cognitive.microsoft.com/
+    # For Azure OpenAI: Use the Cognitive Services endpoint format (not OpenAI endpoint)
+    # CORRECT: https://eastus.api.cognitive.microsoft.com/
+    # INCORRECT: https://your-resource.openai.azure.com/
     # For OpenAI (not Azure), use:
     # INGENIOUS_MODELS__0__BASE_URL=https://api.openai.com/v1
     # INGENIOUS_MODELS__0__API_VERSION=2024-02-01
@@ -110,7 +111,11 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
 
     **If validation fails with port conflicts**:
     ```bash
-    # Check if validation passes with different port
+    # Find and kill process using port 8000 (recommended approach)
+    lsof -ti:8000 | xargs kill -9
+    uv run ingen validate
+
+    # Alternative: Check if validation passes with different port
     INGENIOUS_WEB_CONFIGURATION__PORT=8001 uv run ingen validate
 
     # Or update your .env file before validating:
@@ -126,11 +131,11 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
 
 4. **Start the Server**:
     ```bash
-    # Start server on port 8000 (recommended for development)
-    uv run ingen serve --port 8000
-
-    # IMPORTANT: For knowledge-base-agent to work properly with local ChromaDB:
+    # REQUIRED: Use KB_POLICY=local_only for knowledge-base-agent to work with ChromaDB
     KB_POLICY=local_only uv run ingen serve --port 8000
+
+    # Alternative: Start server without KB prefix (but knowledge-base-agent may not work)
+    uv run ingen serve --port 8000
 
     # Note: Default port is 80, but port 8000 is recommended to avoid conflicts
     # Additional options:
@@ -202,7 +207,7 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
 **Expected Responses**:
 - **Successful classification-agent response**: JSON with message analysis, sentiment scores, and topic categorization
 - **Successful knowledge-base-agent response**: JSON with relevant information retrieved from local ChromaDB (with sample document, will contain setup instructions; without, may indicate empty knowledge base)
-- **Successful sql-manipulation-agent response**: JSON with SQL query results showing database table information from local SQLite database
+- **Successful sql-manipulation-agent response**: JSON with SQL query results showing database table information from local SQLite database (sample database includes `students_performance` table)
 
 **Example successful responses**:
 ```bash
