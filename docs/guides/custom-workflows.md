@@ -190,11 +190,88 @@ curl -X POST http://localhost:8000/api/v1/chat \
 {
   "thread_id": "uuid-here",
   "message_id": "uuid-here",
-  "agent_response": "I can help you add a task to review documentation...\n\n✅ Task functionality would be implemented here!",
+  "agent_response": "I can help you add a task to review documentation...\n\nTask functionality would be implemented here!",
   "token_count": 0,
   "memory_summary": "Task management interaction: Add task: Review documentation..."
 }
 ```
+
+## Step 5: Testing with Authentication
+
+Custom workflows work seamlessly with both Basic Authentication and JWT authentication. Here's how to test your workflow with authentication enabled.
+
+### Enable Authentication
+
+First, update your `.env` file:
+
+```bash
+# Enable authentication
+INGENIOUS_WEB_CONFIGURATION__AUTHENTICATION__ENABLE=true
+INGENIOUS_WEB_CONFIGURATION__AUTHENTICATION__USERNAME=admin
+INGENIOUS_WEB_CONFIGURATION__AUTHENTICATION__PASSWORD=secure_password
+```
+
+Restart the server for authentication to take effect:
+
+```bash
+export PYTHONPATH=$(pwd):$PYTHONPATH
+uv run ingen serve --port 8000
+```
+
+### Basic Authentication Testing
+
+```bash
+# Test with correct credentials (should succeed)
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Basic $(echo -n 'admin:secure_password' | base64)" \
+  -d @test_task_manager.json
+
+# Test with wrong credentials (should return 401)
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Basic $(echo -n 'wrong:wrong' | base64)" \
+  -d @test_task_manager.json
+```
+
+**Expected Results:**
+- Correct credentials: Full workflow response
+- Wrong credentials: `{"detail":"Incorrect username or password"}`
+
+### JWT Authentication Testing
+
+```bash
+# 1. Login to get JWT tokens
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "secure_password"}'
+
+# Extract access token from response (manually or with jq)
+TOKEN="your-access-token-here"
+
+# 2. Test custom workflow with JWT token
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d @test_task_manager.json
+
+# 3. Verify token (optional)
+curl -X GET http://localhost:8000/api/v1/auth/verify \
+  -H "Authorization: Bearer $TOKEN"
+
+# 4. Test with invalid token (should return 401)
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer invalid-token" \
+  -d @test_task_manager.json
+```
+
+**Expected Results:**
+- Valid JWT token: Full workflow response
+- Invalid JWT token: `{"detail":"Authentication required"}`
+- Token verification: `{"username":"admin","valid":true}`
+
+For more authentication details, see the [Authentication Guide](../auth.md).
 
 ## Common Issues and Troubleshooting
 
