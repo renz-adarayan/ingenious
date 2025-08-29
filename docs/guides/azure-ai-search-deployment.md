@@ -61,12 +61,21 @@ az cognitiveservices account deployment create \
 
 ## Environment Configuration
 
+### CRITICAL: Model Configuration Requirements
+
+**IMPORTANT**: Azure AI Search requires TWO separate model configurations - one for embeddings and one for chat/generation. Without both configured with different deployment names, you will receive the error "Embedding and chat deployments must not be the same".
+
 ### Update .env File
 
 Migrate from local ChromaDB to Azure AI Search:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
+| **Model Configuration (REQUIRED)** | | |
+| `INGENIOUS_MODELS__0__ROLE` | Must be set to "chat" | `chat` |
+| `INGENIOUS_MODELS__0__DEPLOYMENT` | Chat model deployment | `gpt-4o-mini-deployment` |
+| `INGENIOUS_MODELS__1__ROLE` | Must be set to "embedding" | `embedding` |
+| `INGENIOUS_MODELS__1__DEPLOYMENT` | Embedding model deployment | `text-embedding-3-small-deployment` |
 | `KB_POLICY` | Backend selection policy | `azure_only` or `prefer_azure` |
 | `INGENIOUS_AZURE_SEARCH_SERVICES__0__ENDPOINT` | Search service endpoint | `https://your-search-service.search.windows.net` |
 | `INGENIOUS_AZURE_SEARCH_SERVICES__0__KEY` | Search admin key | `your-search-admin-key` |
@@ -80,6 +89,24 @@ Migrate from local ChromaDB to Azure AI Search:
 ### Complete .env Configuration
 
 ```bash
+# Model 0: Chat/Generation model (REQUIRED)
+INGENIOUS_MODELS__0__API_KEY=your-openai-api-key
+INGENIOUS_MODELS__0__BASE_URL=https://your-region.api.cognitive.microsoft.com/
+INGENIOUS_MODELS__0__MODEL=gpt-4o-mini
+INGENIOUS_MODELS__0__API_VERSION=2024-12-01-preview
+INGENIOUS_MODELS__0__DEPLOYMENT=gpt-4o-mini-deployment
+INGENIOUS_MODELS__0__API_TYPE=rest
+INGENIOUS_MODELS__0__ROLE=chat  # CRITICAL: Must be "chat"
+
+# Model 1: Embedding model (REQUIRED for Azure AI Search)
+INGENIOUS_MODELS__1__API_KEY=your-openai-api-key
+INGENIOUS_MODELS__1__BASE_URL=https://your-region.api.cognitive.microsoft.com/
+INGENIOUS_MODELS__1__MODEL=text-embedding-3-small
+INGENIOUS_MODELS__1__API_VERSION=2024-12-01-preview
+INGENIOUS_MODELS__1__DEPLOYMENT=text-embedding-3-small-deployment
+INGENIOUS_MODELS__1__API_TYPE=rest
+INGENIOUS_MODELS__1__ROLE=embedding  # CRITICAL: Must be "embedding"
+
 # Knowledge base policy - choose one:
 KB_POLICY=azure_only          # Use only Azure AI Search (strict)
 # KB_POLICY=prefer_azure      # Prefer Azure, fallback to local ChromaDB
@@ -99,24 +126,20 @@ INGENIOUS_AZURE_SEARCH_SERVICES__0__ENDPOINT=https://your-search-service.search.
 INGENIOUS_AZURE_SEARCH_SERVICES__0__KEY=your-search-admin-key
 INGENIOUS_AZURE_SEARCH_SERVICES__0__INDEX_NAME=knowledge-base
 
-# Azure OpenAI Deployments (MUST be different)
-INGENIOUS_AZURE_SEARCH_SERVICES__0__EMBEDDING_DEPLOYMENT_NAME=text-embedding-3-small-deployment
-INGENIOUS_AZURE_SEARCH_SERVICES__0__GENERATION_DEPLOYMENT_NAME=gpt-4o-mini-deployment
-
-# Azure OpenAI Configuration for Search Service
-INGENIOUS_AZURE_SEARCH_SERVICES__0__OPENAI_ENDPOINT=https://your-region.api.cognitive.microsoft.com/
-INGENIOUS_AZURE_SEARCH_SERVICES__0__OPENAI_KEY=your-openai-key
-INGENIOUS_AZURE_SEARCH_SERVICES__0__OPENAI_VERSION=2024-12-01-preview
+# Note: The embedding and generation deployments are now configured via INGENIOUS_MODELS above
+# These Azure Search specific settings are no longer required for deployments
 ```
 
 ## Create Search Index and Upload Documents
 
 ### 1. Create Search Index Schema
 
-Create a basic search index with required fields:
+**IMPORTANT**: The index MUST include a `vector` field for Azure AI Search to work with the knowledge-base-agent. Without this field, you will get "Unknown field 'vector' in vector field list" error.
+
+Create a search index with vector support:
 
 ```bash
-# Create index schema file
+# Create index schema file with vector field
 cat > index_schema.json << 'EOF'
 {
   "name": "knowledge-base",
@@ -128,7 +151,7 @@ cat > index_schema.json << 'EOF'
       "searchable": false,
       "filterable": true,
       "retrievable": true,
-      "sortable": true,
+      "sortable": false,
       "facetable": false
     },
     {
@@ -138,56 +161,129 @@ cat > index_schema.json << 'EOF'
       "filterable": false,
       "retrievable": true,
       "sortable": false,
-      "facetable": false,
-      "analyzer": "standard.lucene"
+      "facetable": false
     },
     {
       "name": "title",
       "type": "Edm.String",
       "searchable": true,
-      "filterable": false,
+      "filterable": true,
       "retrievable": true,
-      "sortable": false,
-      "facetable": false,
-      "analyzer": "standard.lucene"
+      "sortable": true,
+      "facetable": false
+    },
+    {
+      "name": "vector",
+      "type": "Collection(Edm.Single)",
+      "searchable": true,
+      "retrievable": false,
+      "dimensions": 1536,
+      "vectorSearchProfile": "vector-profile"
     }
-  ]
+  ],
+  "vectorSearch": {
+    "algorithms": [
+      {
+        "name": "vector-algorithm",
+        "kind": "hnsw",
+        "hnswParameters": {
+          "metric": "cosine",
+          "m": 4,
+          "efConstruction": 400,
+          "efSearch": 500
+        }
+      }
+    ],
+    "profiles": [
+      {
+        "name": "vector-profile",
+        "algorithm": "vector-algorithm"
+      }
+    ]
+  },
+  "semantic": {
+    "defaultConfiguration": "default",
+    "configurations": [
+      {
+        "name": "default",
+        "prioritizedFields": {
+          "titleField": {
+            "fieldName": "title"
+          },
+          "prioritizedContentFields": [
+            {
+              "fieldName": "content"
+            }
+          ]
+        }
+      }
+    ]
+  }
 }
 EOF
 
 # Create the index
-curl -X POST "https://your-search-service.search.windows.net/indexes?api-version=2023-11-01" \
+curl -X PUT "https://your-search-service.search.windows.net/indexes/knowledge-base?api-version=2024-05-01-preview" \
   -H "Content-Type: application/json" \
   -H "api-key: your-search-admin-key" \
   -d @index_schema.json
 ```
 
-### 2. Upload Sample Documents
+### 2. Generate Embeddings and Upload Documents
 
-```bash
-# Create sample documents
-cat > sample_documents.json << 'EOF'
-{
-  "value": [
+**IMPORTANT**: Documents must include vector embeddings generated using your embedding deployment.
+
+```python
+# generate_embeddings.py
+from openai import AzureOpenAI
+import json
+
+client = AzureOpenAI(
+    api_key="your-openai-api-key",
+    api_version="2024-12-01-preview",
+    azure_endpoint="https://your-region.api.cognitive.microsoft.com/"
+)
+
+documents = [
     {
-      "id": "1",
-      "title": "Ingenious Setup Guide",
-      "content": "Ingenious is a multi-agent AI framework that allows you to quickly set up APIs for AI agents. Prerequisites include Python 3.13+, OpenAI API key or Azure OpenAI credentials, and UV package manager. Installation steps: 1. Initialize UV project with uv init, 2. Install Ingenious with uv add ingenious[azure-full], 3. Initialize project with uv run ingen init, 4. Configure environment variables in .env file, 5. Start server with uv run ingen serve --port 8000."
+        "id": "1",
+        "title": "Ingenious Setup Guide",
+        "content": "Ingenious is a multi-agent AI framework that allows you to quickly set up APIs for AI agents."
     },
     {
-      "id": "2",
-      "title": "Azure Integration Guide",
-      "content": "Ingenious supports Azure SQL, Cosmos DB, Azure Blob Storage, and Azure AI Search. For chat history persistence, you can use SQLite for local development or Azure SQL/Cosmos DB for production. Azure Blob Storage can be used for prompt template storage. Azure AI Search enables advanced knowledge base search capabilities with semantic ranking and vector search."
+        "id": "2",
+        "title": "Azure Integration Guide",
+        "content": "Ingenious supports Azure SQL, Cosmos DB, Azure Blob Storage, and Azure AI Search."
     }
-  ]
-}
-EOF
+]
 
-# Upload documents to the index
-curl -X POST "https://your-search-service.search.windows.net/indexes/knowledge-base/docs/index?api-version=2023-11-01" \
+# Generate embeddings
+for doc in documents:
+    response = client.embeddings.create(
+        input=doc["content"],
+        model="text-embedding-3-small-deployment"  # Your embedding deployment
+    )
+    doc["vector"] = response.data[0].embedding
+    print(f"Generated embedding for document {doc['id']}")
+
+with open("documents_with_embeddings.json", "w") as f:
+    json.dump({"value": documents}, f)
+```
+
+Run the script and upload:
+
+```bash
+# Install OpenAI client
+uv add openai
+
+# Generate embeddings
+uv run python generate_embeddings.py
+
+# Upload documents with embeddings to the index
+curl -X POST "https://your-search-service.search.windows.net/indexes/knowledge-base/docs/index?api-version=2024-05-01-preview" \
   -H "Content-Type: application/json" \
   -H "api-key: your-search-admin-key" \
-  -d @sample_documents.json
+  -d @documents_with_embeddings.json
 ```
 
 ## Policy Configuration
@@ -222,9 +318,15 @@ uv run ingen validate
 
 Expected output: `All validations passed! Your Ingenious setup is ready.`
 
-### 2. Start Server
+### 2. Start Server with Policy
 
 ```bash
+# For Azure AI Search
+export KB_POLICY=prefer_azure
+uv run ingen serve --port 8000
+
+# For local ChromaDB
+export KB_POLICY=local_only
 uv run ingen serve --port 8000
 ```
 
@@ -297,9 +399,15 @@ KB_POLICY=prefer_local
 
 **Error**: "Embedding and chat deployments must not be the same"
 
-**Solution**: Ensure you have separate Azure OpenAI deployments:
-- Embedding deployment: `text-embedding-3-small-deployment`
-- Generation deployment: `gpt-4o-mini-deployment` (or different model)
+**Solution**: You must configure TWO separate models in your .env file:
+1. Model 0 (`INGENIOUS_MODELS__0__*`) with `ROLE=chat` for generation
+2. Model 1 (`INGENIOUS_MODELS__1__*`) with `ROLE=embedding` for embeddings
+
+Both must have different deployment names. Without both models configured, the system will try to use the same deployment for both purposes and fail.
+
+**Error**: "Unknown field 'vector' in vector field list"
+
+**Solution**: Your index schema is missing the vector field. Recreate the index with the proper schema including a `vector` field of type `Collection(Edm.Single)` with 1536 dimensions as shown above
 
 ```bash
 # Verify deployments are different

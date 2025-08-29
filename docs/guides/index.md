@@ -7,7 +7,7 @@ This section provides detailed guides for using specific features and capabiliti
 - **[Complete Azure Deployment](complete-azure-deployment.md)** - Complete enterprise deployment instructions
 - **[Custom Workflows](custom-workflows.md)** - Setting up custom workflows built on top of Ingenious.
 - **[Cosmos DB Integration](cosmos-db-deployment.md)** - Persist chat history in Cosmos DB rather than Azure SQL.
-- **[Azure AI Search Integration](azure-ai-search-deployment.md)** - EXPERIMENTAL! use the built-in knowledge-base-agent with Azure AI Search.
+- **[Azure AI Search Integration](azure-ai-search-deployment.md)** - Use the built-in knowledge-base-agent with Azure AI Search.
 
 ## Prerequisites
 
