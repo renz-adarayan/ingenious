@@ -57,6 +57,7 @@ AzureSqlClientBuilder = None
 AzureSqlClientBuilderWithAuth = None
 AzureSearchAsyncClientBuilder = None
 AsyncAzureOpenAIClientBuilder = None
+CosmosClientBuilder = None
 __all__ = [
     "AzureClientFactory",
     "HAS_COSMOS",
@@ -70,6 +71,7 @@ __all__ = [
     "AzureSqlClientBuilderWithAuth",
     "AzureSearchAsyncClientBuilder",
     "AsyncAzureOpenAIClientBuilder",
+    "CosmosClientBuilder",
 ]
 
 _PKG_BASE = __package__  # e.g., "ingenious.client.azure"
@@ -299,16 +301,30 @@ class AzureClientFactory:
         **_: Any,
     ) -> Any:
         """
-        Current test contract:
-        - If the cosmos package is missing (`HAS_COSMOS` is False): raise ImportError
-          with "azure-cosmos is required".
-        - If present (`HAS_COSMOS` is True): return NotImplemented.
+        Create Azure Cosmos DB client based on configuration.
 
-        Accepts kwargs for compatibility with tests that pass endpoint/auth values.
+        Args:
+            cosmos_config: Cosmos DB configuration
+
+        Returns:
+            CosmosClient: Configured Azure Cosmos DB client
+
+        Raises:
+            ImportError: If azure-cosmos package is not available
+            ValueError: If cosmos_config is None
         """
         if not HAS_COSMOS:
             raise ImportError("azure-cosmos is required")
-        return NotImplemented
+        if cosmos_config is None:
+            raise ValueError("Cosmos config is required")
+        builder_cls = _ensure_builder(
+            "CosmosClientBuilder",
+            f"{_PKG_BASE}.builder.cosmos_client",
+            "CosmosClientBuilder",
+            "azure-cosmos is required to create Cosmos client",
+        )
+        builder = builder_cls(cosmos_config)
+        return builder.build()
 
     # --------------------------- Search (sync) ---------------------------
 

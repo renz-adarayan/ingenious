@@ -1,6 +1,6 @@
 [project]
 name = "ingenious"
-version = "0.2.4"
+version = "0.2.5"
 description = "An enterprise-grade Python library for quickly setting up APIs to interact with AI Agents"
 readme = "README.md"
 license = { text = "MIT" }
@@ -73,11 +73,11 @@ dev = [
   "jsonpickle>=4.1.1",
   "mkdocs>=1.6.1",
   "mkdocs-get-deps>=0.2.0",
-  "mkdocs-material>=9.6.18",
+  "mkdocs-material>=9.5.0",
   "mypy>=1.16.1",
   "pip-audit>=2.9.0",
   "pre-commit>=4.2.0",
-  "pymdown-extensions>=10.16.1",
+  "pymdown-extensions>=10.7",
   "pytest>=8.3.5",
   "pytest-asyncio>=0.26.0",
   "pytest-cov>=6.1.1",

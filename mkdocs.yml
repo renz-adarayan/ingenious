@@ -49,9 +49,6 @@ markdown_extensions:
       alternate_style: true
   - pymdownx.tasklist:
       custom_checkbox: true
-  - pymdownx.emoji:
-      emoji_index: material.extensions.emoji.twemoji
-      emoji_generator: material.extensions.emoji.to_svg
   - admonition
   - pymdownx.details
   - pymdownx.keys
@@ -86,17 +83,11 @@ nav:
   - User Guides:
       - guides/index.md
       - Complete Azure Deployment: guides/complete-azure-deployment.md
-      - Data & Document Preparation: guides/data-document-preparation.md
-      - Document Processing: guides/document-processing.md
-      - Document Chunking: guides/document-chunking.md
-  - Extensions:
-      - extensions/index.md
-      - Custom Agents: extensions/custom-agents.md
-      - Conversation Patterns: extensions/conversation-patterns.md
-      - Custom Templates: extensions/custom-templates.md
-      - Flow Implementation: extensions/flow-implementation.md
-  - Architecture: architecture.md
-  - Development: development.md
+      - Custom Workflows: guides/custom-workflows.md
+      - Cosmos DB Integration: guides/cosmos-db-deployment.md
+      - Azure AI Search: guides/azure-ai-search-deployment.md
+  - Developer Guides:
+      - Authentication: auth.md
 exclude_docs: |
   data/*
 extra_javascript:
