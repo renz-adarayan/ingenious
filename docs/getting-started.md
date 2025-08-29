@@ -1,6 +1,6 @@
 ## Quick Start
 
-Get up and running in 5 minutes with just an OpenAI API key!
+Get up and running in 5 minutes with just an Azure OpenAI API key!
 
 ### Prerequisites
 - Python 3.13 or higher (required - earlier versions are not supported)
@@ -14,7 +14,7 @@ Get up and running in 5 minutes with just an OpenAI API key!
 **WARNING: Audit ALL Azure CLI commands!**
 
 ```markdown
-Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingenious/guides/complete-azure-deployment/).
+Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingenious/getting-started/) and [this guide](https://blog.insight-services-apac.dev/ingenious/guides/complete-azure-deployment/).
 
 - Deploy only required resources at minimal cost.
 - Use a new resource group: **<your-new-rg-name>**.
@@ -212,6 +212,8 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
 {"response": "Found 3 tables in database: users, products, orders..."}
 ```
 
+**If you see error responses**, check the troubleshooting section above or the detailed [troubleshooting guide](docs/getting-started/troubleshooting.md).
+
 That's it! You should see a JSON response with AI analysis of the input.
 
 **Next Steps - Test Additional Workflows**:
@@ -225,7 +227,6 @@ That's it! You should see a JSON response with AI analysis of the input.
 
     # Create bike-insights test data file
     # IMPORTANT: bike-insights requires JSON data in the user_prompt field (double-encoded JSON)
-    # Use printf for precise formatting (recommended)
     printf '%s\n' '{
       "user_prompt": "{\"revision_id\": \"test-v1\", \"identifier\": \"test-001\", \"stores\": [{\"name\": \"Test Store\", \"location\": \"NSW\", \"bike_sales\": [{\"product_code\": \"MB-TREK-2021-XC\", \"quantity_sold\": 2, \"sale_date\": \"2023-04-01\", \"year\": 2023, \"month\": \"April\", \"customer_review\": {\"rating\": 4.5, \"comment\": \"Great bike\"}}], \"bike_stock\": []}]}",
       "conversation_flow": "bike-insights"
@@ -241,35 +242,3 @@ That's it! You should see a JSON response with AI analysis of the input.
 - **Core Library Workflows** (`classification-agent`, `knowledge-base-agent`, `sql-manipulation-agent`) are always available and accept simple text prompts
 - **Template Workflows** like `bike-insights` require JSON-formatted data with specific fields and are only available after running `ingen init`
 - The `bike-insights` workflow is the recommended "Hello World" example for new users
-
-## Workflow Categories
-
-Insight Ingenious provides multiple conversation workflows with different configuration requirements:
-
-### Core Library Workflows (Always Available)
-These workflows are built into the Ingenious library and available immediately:
-
-- `classification-agent` - Simple text classification and routing to categories (works with any OpenAI-compatible API)
-- `knowledge-base-agent` - Search and retrieve information from knowledge bases (local ChromaDB for development, Azure AI Search for production)
-- `sql-manipulation-agent` - Execute SQL queries based on natural language (local SQLite for development, Azure SQL for production)
-
-> **Note**: Core workflows support both hyphenated (`classification-agent`) and underscored (`classification_agent`) naming formats for backward compatibility.
-
-### Template Workflows (Created by `ingen init`)
-These workflows are provided as examples in the project template when you run `ingen init`:
-
-- `bike-insights` - Comprehensive bike sales analysis showcasing multi-agent coordination (**ONLY available after `ingen init`** - not included in the core library)
-
-> **Important**: The `bike-insights` workflow is NOT part of the core library. It's a template example that's created when you initialize a new project with `ingen init`. This is the recommended "Hello World" example for learning how to build custom workflows.
-
-## Documentation
-
-For detailed documentation, see the [docs](https://insight-services-apac.github.io/ingenious/).
-
-## Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](https://github.com/Insight-Services-APAC/ingenious/blob/main/CONTRIBUTING.md) for guidelines.
-
-## License
-
-This project is licensed under the terms specified in the [LICENSE](https://github.com/Insight-Services-APAC/ingenious/blob/main/LICENSE) file.
