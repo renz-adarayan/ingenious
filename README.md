@@ -26,6 +26,8 @@ Get up and running in 5 minutes with just an Azure OpenAI API key!
 ```markdown
 Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingenious/getting-started/) and [this guide](https://blog.insight-services-apac.dev/ingenious/guides/complete-azure-deployment/).
 
+Set up ingenious locally first and then migrate to Azure services as shown in the docs.
+
 - Deploy only required resources at minimal cost.
 - Use a new resource group: **<your-new-rg-name>**.
 - For the SQL Server SKU choose Basic - 5 DTUs
@@ -221,8 +223,6 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
 # sql-manipulation-agent typical response:
 {"response": "Found 3 tables in database: users, products, orders..."}
 ```
-
-**If you see error responses**, check the troubleshooting section above or the detailed [troubleshooting guide](docs/getting-started/troubleshooting.md).
 
 That's it! You should see a JSON response with AI analysis of the input.
 

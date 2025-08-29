@@ -334,6 +334,5 @@ except Exception as e:
 ## Next Steps
 
 - Explore the `bike-insights` workflow template for advanced multi-agent patterns
-- Review the [Architecture Guide](../architecture.md) for deeper system understanding
 - Check the main documentation for integration patterns
 - See the [Complete Azure Deployment](complete-azure-deployment.md) guide for production setup

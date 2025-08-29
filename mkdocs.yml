@@ -87,7 +87,6 @@ nav:
       - Cosmos DB Integration: guides/cosmos-db-deployment.md
   - Developer Guides:
       - Authentication: auth.md
-      - Architecture: architecture.md
 exclude_docs: |
   data/*
 extra_javascript:

@@ -212,8 +212,6 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
 {"response": "Found 3 tables in database: users, products, orders..."}
 ```
 
-**If you see error responses**, check the troubleshooting section above or the detailed [troubleshooting guide](docs/getting-started/troubleshooting.md).
-
 That's it! You should see a JSON response with AI analysis of the input.
 
 **Next Steps - Test Additional Workflows**:
