@@ -59,8 +59,9 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
     INGENIOUS_MODELS__0__API_KEY=your-actual-api-key-here
     INGENIOUS_MODELS__0__BASE_URL=https://eastus.api.cognitive.microsoft.com/
 
-    # For Azure OpenAI: Use the cognitive services endpoint format
-    # INGENIOUS_MODELS__0__BASE_URL=https://eastus.api.cognitive.microsoft.com/
+    # For Azure OpenAI: Use the Cognitive Services endpoint format (not OpenAI endpoint)
+    # CORRECT: https://eastus.api.cognitive.microsoft.com/
+    # INCORRECT: https://your-resource.openai.azure.com/
     # For OpenAI (not Azure), use:
     # INGENIOUS_MODELS__0__BASE_URL=https://api.openai.com/v1
     # INGENIOUS_MODELS__0__API_VERSION=2024-02-01
@@ -97,9 +98,15 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
     uv run ingen validate  # Check configuration before starting
     ```
 
+    **Expected validation output**: You should see confirmation that your configuration is valid and a count of available workflows (typically showing 4/4 workflows working: classification-agent, knowledge-base-agent, sql-manipulation-agent, and bike-insights after `ingen init`).
+
     **If validation fails with port conflicts**:
     ```bash
-    # Check if validation passes with different port
+    # Find and kill process using port 8000 (recommended approach)
+    lsof -ti:8000 | xargs kill -9
+    uv run ingen validate
+
+    # Alternative: Check if validation passes with different port
     INGENIOUS_WEB_CONFIGURATION__PORT=8001 uv run ingen validate
 
     # Or update your .env file before validating:
@@ -115,11 +122,11 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
 
 4. **Start the Server**:
     ```bash
-    # Start server on port 8000 (recommended for development)
-    uv run ingen serve --port 8000
-
-    # IMPORTANT: For knowledge-base-agent to work properly with local ChromaDB:
+    # REQUIRED: Use KB_POLICY=local_only for knowledge-base-agent to work with ChromaDB
     KB_POLICY=local_only uv run ingen serve --port 8000
+
+    # Alternative: Start server without KB prefix (but knowledge-base-agent may not work)
+    uv run ingen serve --port 8000
 
     # Note: Default port is 80, but port 8000 is recommended to avoid conflicts
     # Additional options:
@@ -129,8 +136,20 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
 
 5. **Verify Health**:
     ```bash
-    # Check server health
+    # Check server health (adjust port if different)
     curl http://localhost:8000/api/v1/health
+    ```
+
+    **Expected health response**: A JSON response indicating server status:
+    ```json
+    {
+      "status": "healthy",
+      "timestamp": "2025-08-29T01:15:30.830525",
+      "response_time_ms": 1.4,
+      "components": {"configuration": "ok", "profile": "ok"},
+      "version": "1.0.0",
+      "uptime": "available"
+    }
     ```
 
 6. **Test with Core Workflows**:
@@ -148,10 +167,50 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
     curl -X POST http://localhost:8000/api/v1/chat -H "Content-Type: application/json" -d @test_sql.json
     ```
 
+    **To populate knowledge base for testing** (optional but recommended):
+    ```bash
+    # Create sample knowledge base document for testing
+    mkdir -p .tmp/knowledge_base
+    cat > .tmp/knowledge_base/setup_guide.md << 'EOF'
+    # Ingenious Setup Guide
+
+    ## Quick Setup Instructions
+
+    Ingenious is a multi-agent AI framework that allows you to quickly set up APIs for AI agents.
+
+    ### Prerequisites
+    - Python 3.13+
+    - OpenAI API key or Azure OpenAI credentials
+    - UV package manager
+
+    ### Installation Steps
+    1. Initialize UV project: `uv init`
+    2. Install Ingenious: `uv add "ingenious[azure-full]"`
+    3. Initialize project: `uv run ingen init`
+    4. Configure environment variables in .env file
+    5. Start server: `uv run ingen serve --port 8000`
+    EOF
+
+    # Now test knowledge-base-agent again to see populated results
+    curl -X POST http://localhost:8000/api/v1/chat -H "Content-Type: application/json" -d @test_knowledge.json
+    ```
+
 **Expected Responses**:
-- **Successful classification-agent response**: JSON with message analysis and categories
-- **Successful knowledge-base-agent response**: JSON with relevant information retrieved (may indicate empty knowledge base initially)
-- **Successful sql-manipulation-agent response**: JSON with query results or confirmation
+- **Successful classification-agent response**: JSON with message analysis, sentiment scores, and topic categorization
+- **Successful knowledge-base-agent response**: JSON with relevant information retrieved from local ChromaDB (with sample document, will contain setup instructions; without, may indicate empty knowledge base)
+- **Successful sql-manipulation-agent response**: JSON with SQL query results showing database table information from local SQLite database (sample database includes `students_performance` table)
+
+**Example successful responses**:
+```bash
+# classification-agent typical response format:
+{"response": "Analysis: Positive sentiment (0.8/1.0)... Category: Product Feedback"}
+
+# knowledge-base-agent with populated knowledge base:
+{"response": "Based on the setup guide: Ingenious requires Python 3.13+..."}
+
+# sql-manipulation-agent typical response:
+{"response": "Found 3 tables in database: users, products, orders..."}
+```
 
 **If you see error responses**, check the troubleshooting section above or the detailed [troubleshooting guide](docs/getting-started/troubleshooting.md).
 
