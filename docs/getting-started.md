@@ -212,8 +212,6 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
 {"response": "Found 3 tables in database: users, products, orders..."}
 ```
 
-**If you see error responses**, check the troubleshooting section above or the detailed [troubleshooting guide](getting-started/troubleshooting.md).
-
 That's it! You should see a JSON response with AI analysis of the input.
 
 **Next Steps - Test Additional Workflows**:
@@ -263,10 +261,6 @@ These workflows are provided as examples in the project template when you run `i
 - `bike-insights` - Comprehensive bike sales analysis showcasing multi-agent coordination (**ONLY available after `ingen init`** - not included in the core library)
 
 > **Important**: The `bike-insights` workflow is NOT part of the core library. It's a template example that's created when you initialize a new project with `ingen init`. This is the recommended "Hello World" example for learning how to build custom workflows.
-
-## Troubleshooting
-
-For common issues like port conflicts, configuration errors, or workflow problems, see the [detailed troubleshooting guide](getting-started/troubleshooting.md).
 
 ## Documentation
 

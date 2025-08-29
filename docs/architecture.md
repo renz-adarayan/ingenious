@@ -8,72 +8,60 @@ Insight Ingenious is architected as a production-ready library with enterprise-g
 
 ```mermaid
 graph TB
-    subgraph "Client Layer"
-        API_CLIENT[API Clients<br/>External Applications]
-        DOCS[API Documentation<br/>Swagger/OpenAPI]
+    subgraph ClientLayer ["Client Layer"]
+        API_CLIENT["API Clients<br/>External Applications"]
+        DOCS["API Documentation<br/>Swagger/OpenAPI"]
     end
 
-    subgraph "API Gateway"
-        API[FastAPI<br/>REST Endpoints]
-        AUTH[Authentication<br/>& Authorization]
+    subgraph APIGateway ["API Gateway"]
+        API["FastAPI<br/>REST Endpoints"]
+        AUTH["Authentication<br/>& Authorization"]
     end
 
-    subgraph "Core Engine"
-        AGENT_SERVICE[Agent Service<br/>Conversation Manager]
-        CONVERSATION_FLOWS[Conversation Flows<br/>Workflow Orchestrator]
-        LLM_SERVICE[LLM Service<br/>Azure OpenAI Integration]
+    subgraph CoreEngine ["Core Engine"]
+        AGENT_SERVICE["Agent Service<br/>Conversation Manager"]
+        CONVERSATION_FLOWS["Conversation Flows<br/>Workflow Orchestrator"]
+        LLM_SERVICE["LLM Service<br/>Azure OpenAI Integration"]
     end
 
-    subgraph "Extension Layer"
-        CUSTOM_AGENTS[Custom Agents<br/>Domain Specialists]
-        PATTERNS[Conversation Patterns<br/>Workflow Templates]
-        TOOLS[Custom Tools<br/>External Integrations]
+    subgraph ExtensionLayer ["Extension Layer"]
+        CUSTOM_AGENTS["Custom Agents<br/>Domain Specialists"]
+        PATTERNS["Conversation Patterns<br/>Workflow Templates"]
+        TOOLS["Custom Tools<br/>External Integrations"]
     end
 
-    subgraph "Storage Layer"
-        CONFIG[Configuration<br/>Environment Variables]
-        HISTORY[Chat History<br/>SQLite/Azure SQL]
-        FILES[File Storage<br/>Local/Azure Blob]
+    subgraph StorageLayer ["Storage Layer"]
+        CONFIG["Configuration<br/>Environment Variables"]
+        HISTORY["Chat History<br/>SQLite/Azure SQL"]
+        FILES["File Storage<br/>Local/Azure Blob"]
     end
 
-    subgraph "External Services"
-        AZURE[Azure OpenAI<br/>GPT Models]
-        EXTERNAL_API[External APIs<br/>Data Sources]
+    subgraph ExternalServices ["External Services"]
+        AZURE["Azure OpenAI<br/>GPT Models"]
+        EXTERNAL_API["External APIs<br/>Data Sources"]
     end
 
-    %% Client connections
     API_CLIENT --> API
     API_CLIENT --> DOCS
-
-    %% API Gateway routing
     API --> AUTH
     AUTH --> AGENT_SERVICE
-
-    %% Core Engine interactions
     AGENT_SERVICE --> CONVERSATION_FLOWS
     CONVERSATION_FLOWS --> LLM_SERVICE
     AGENT_SERVICE --> CUSTOM_AGENTS
-
-    %% Extension Layer integrations
     CUSTOM_AGENTS --> PATTERNS
     PATTERNS --> TOOLS
-
-    %% Storage Layer connections
     AGENT_SERVICE --> CONFIG
     AGENT_SERVICE --> HISTORY
     AGENT_SERVICE --> FILES
-
-    %% External Service connections
     LLM_SERVICE --> AZURE
     TOOLS --> EXTERNAL_API
 
-    %% Styling
-    classDef clientLayer fill:#e1f5fe
-    classDef apiLayer fill:#f3e5f5
-    classDef coreLayer fill:#e8f5e8
-    classDef extensionLayer fill:#fff3e0
-    classDef storageLayer fill:#fce4ec
-    classDef externalLayer fill:#f1f8e9
+    classDef clientLayer fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef apiLayer fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef coreLayer fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef extensionLayer fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef storageLayer fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef externalLayer fill:#f1f8e9,stroke:#33691e,stroke-width:2px
 
     class API_CLIENT,DOCS clientLayer
     class API,AUTH apiLayer
@@ -171,44 +159,53 @@ graph TB
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant API
-    participant Auth
-    participant AgentService
-    participant ConversationFlows
-    participant LLM
-    participant Storage
+    participant Client as Client
+    participant API as API
+    participant Auth as Auth
+    participant AgentService as Agent Service
+    participant ConversationFlows as Conversation Flows
+    participant LLM as LLM
+    participant Storage as Storage
 
-    Client->>API: POST /api/v1/chat
-    API->>Auth: Validate credentials
-    Auth-->>API: Authentication result
+    Client->>+API: POST /api/v1/chat
+    API->>+Auth: Validate credentials
+    Auth-->>-API: Authentication result
 
-    API->>AgentService: Process conversation request
-    AgentService->>Storage: Load conversation history
-    Storage-->>AgentService: Historical context
+    API->>+AgentService: Process conversation request
+    AgentService->>+Storage: Load conversation history
+    Storage-->>-AgentService: Historical context
 
-    AgentService->>ConversationFlows: Execute conversation flow
-    ConversationFlows->>LLM: Generate AI response
-    LLM-->>ConversationFlows: AI-generated content
+    AgentService->>+ConversationFlows: Execute conversation flow
+    ConversationFlows->>+LLM: Generate AI response
+    LLM-->>-ConversationFlows: AI-generated content
 
-    ConversationFlows-->>AgentService: Flow execution result
-    AgentService->>Storage: Save conversation state
-    AgentService-->>API: Conversation response
+    ConversationFlows-->>-AgentService: Flow execution result
+    AgentService->>+Storage: Save conversation state
+    Storage-->>-AgentService: Save confirmation
+    AgentService-->>-API: Conversation response
 
-    API-->>Client: JSON response
+    API-->>-Client: JSON response
 ```
 
 ### Configuration Loading
 
 ```mermaid
-graph LR
-    ENV[Environment Variables] --> PYDANTIC[Pydantic Settings]
-    PYDANTIC --> VALIDATION[Configuration Validation]
-    VALIDATION --> SERVICES[Service Initialization]
-    SERVICES --> READY[System Ready]
+flowchart LR
+    ENV["Environment Variables"] --> PYDANTIC["Pydantic Settings"]
+    PYDANTIC --> VALIDATION["Configuration Validation"]
+    VALIDATION --> SERVICES["Service Initialization"]
+    SERVICES --> READY["System Ready"]
 
-    VALIDATION -->|Validation Error| ERROR[Configuration Error]
-    ERROR --> EXIT[System Exit]
+    VALIDATION -->|"Validation Error"| ERROR["Configuration Error"]
+    ERROR --> EXIT["System Exit"]
+
+    classDef success fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+    classDef error fill:#ffebee,stroke:#f44336,stroke-width:2px
+    classDef process fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+
+    class ENV,PYDANTIC,VALIDATION,SERVICES process
+    class READY success
+    class ERROR,EXIT error
 ```
 
 ## Security Architecture
@@ -216,18 +213,27 @@ graph LR
 ### Authentication Flow
 
 ```mermaid
-graph TB
-    CLIENT[Client Request] --> AUTH_CHECK{Authentication<br/>Required?}
-    AUTH_CHECK -->|No| PROCESS[Process Request]
-    AUTH_CHECK -->|Yes| VALIDATE{Validate<br/>Credentials}
+flowchart TB
+    CLIENT["Client Request"] --> AUTH_CHECK{"Authentication<br/>Required?"}
+    AUTH_CHECK -->|"No"| PROCESS["Process Request"]
+    AUTH_CHECK -->|"Yes"| VALIDATE{"Validate<br/>Credentials"}
 
-    VALIDATE -->|Invalid| REJECT[401 Unauthorized]
-    VALIDATE -->|Valid| AUTHORIZE{Check<br/>Authorization}
+    VALIDATE -->|"Invalid"| REJECT["401 Unauthorized"]
+    VALIDATE -->|"Valid"| AUTHORIZE{"Check<br/>Authorization"}
 
-    AUTHORIZE -->|Denied| FORBIDDEN[403 Forbidden]
-    AUTHORIZE -->|Allowed| PROCESS
+    AUTHORIZE -->|"Denied"| FORBIDDEN["403 Forbidden"]
+    AUTHORIZE -->|"Allowed"| PROCESS
 
-    PROCESS --> RESPONSE[Return Response]
+    PROCESS --> RESPONSE["Return Response"]
+
+    classDef success fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+    classDef error fill:#ffebee,stroke:#f44336,stroke-width:2px
+    classDef decision fill:#fff3e0,stroke:#ff9800,stroke-width:2px
+    classDef process fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+
+    class CLIENT,PROCESS,RESPONSE process
+    class AUTH_CHECK,VALIDATE,AUTHORIZE decision
+    class REJECT,FORBIDDEN error
 ```
 
 ### Security Features
@@ -259,20 +265,30 @@ graph TB
 ### Extension Discovery
 
 ```mermaid
-graph TB
-    DISCOVERY[Extension Discovery] --> LOCAL{Local Extensions<br/>Found?}
-    LOCAL -->|Yes| LOAD_LOCAL[Load Local Extensions]
-    LOCAL -->|No| TEMPLATE{Template Extensions<br/>Found?}
+flowchart TB
+    DISCOVERY["Extension Discovery"] --> LOCAL{"Local Extensions<br/>Found?"}
+    LOCAL -->|"Yes"| LOAD_LOCAL["Load Local Extensions"]
+    LOCAL -->|"No"| TEMPLATE{"Template Extensions<br/>Found?"}
 
-    TEMPLATE -->|Yes| LOAD_TEMPLATE[Load Template Extensions]
-    TEMPLATE -->|No| CORE[Load Core Extensions]
+    TEMPLATE -->|"Yes"| LOAD_TEMPLATE["Load Template Extensions"]
+    TEMPLATE -->|"No"| CORE["Load Core Extensions"]
 
-    LOAD_LOCAL --> VALIDATE[Validate Extensions]
+    LOAD_LOCAL --> VALIDATE["Validate Extensions"]
     LOAD_TEMPLATE --> VALIDATE
     CORE --> VALIDATE
 
-    VALIDATE --> REGISTER[Register Extensions]
-    REGISTER --> READY[Extensions Ready]
+    VALIDATE --> REGISTER["Register Extensions"]
+    REGISTER --> READY["Extensions Ready"]
+
+    classDef discovery fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+    classDef decision fill:#fff3e0,stroke:#ff9800,stroke-width:2px
+    classDef process fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px
+    classDef success fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+
+    class DISCOVERY discovery
+    class LOCAL,TEMPLATE decision
+    class LOAD_LOCAL,LOAD_TEMPLATE,CORE,VALIDATE,REGISTER process
+    class READY success
 ```
 
 ### Extension Interface
@@ -289,14 +305,22 @@ Extensions implement the standardized interface:
 ### Logging Architecture
 
 ```mermaid
-graph LR
-    APP[Application] --> STRUCT_LOG[Structured Logging]
-    STRUCT_LOG --> FORMAT[JSON Formatting]
-    FORMAT --> OUTPUT[Log Output]
+flowchart LR
+    APP["Application"] --> STRUCT_LOG["Structured Logging"]
+    STRUCT_LOG --> FORMAT["JSON Formatting"]
+    FORMAT --> OUTPUT["Log Output"]
 
-    OUTPUT --> FILE[File Logs]
-    OUTPUT --> CONSOLE[Console Logs]
-    OUTPUT --> REMOTE[Remote Logging Service]
+    OUTPUT --> FILE["File Logs"]
+    OUTPUT --> CONSOLE["Console Logs"]
+    OUTPUT --> REMOTE["Remote Logging Service"]
+
+    classDef app fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+    classDef process fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px
+    classDef output fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+
+    class APP app
+    class STRUCT_LOG,FORMAT,OUTPUT process
+    class FILE,CONSOLE,REMOTE output
 ```
 
 ### Metrics and Monitoring
@@ -311,16 +335,20 @@ graph LR
 ### Local Development Deployment
 
 ```mermaid
-graph TB
-    CLIENT[API Client] --> APP_INSTANCE[Ingenious Instance<br/>:8000]
-    APP_INSTANCE --> LOCAL_DB[SQLite Database<br/>.tmp/chat_history.db]
-    APP_INSTANCE --> LOCAL_FILES[Local File Storage<br/>.tmp/]
-    APP_INSTANCE --> CHROMADB[ChromaDB<br/>Knowledge Base]
-    APP_INSTANCE --> AZURE_OPENAI[Azure OpenAI<br/>LLM Service]
+flowchart TB
+    CLIENT["API Client"] --> APP_INSTANCE["Ingenious Instance<br/>:8000"]
+    APP_INSTANCE --> LOCAL_DB["SQLite Database<br/>.tmp/chat_history.db"]
+    APP_INSTANCE --> LOCAL_FILES["Local File Storage<br/>.tmp/"]
+    APP_INSTANCE --> CHROMADB["ChromaDB<br/>Knowledge Base"]
+    APP_INSTANCE --> AZURE_OPENAI["Azure OpenAI<br/>LLM Service"]
 
-    classDef localServices fill:#e8f5e8
-    classDef azureServices fill:#e1f5fe
+    classDef client fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+    classDef app fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px
+    classDef localServices fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+    classDef azureServices fill:#e1f5fe,stroke:#01579b,stroke-width:2px
 
+    class CLIENT client
+    class APP_INSTANCE app
     class LOCAL_DB,LOCAL_FILES,CHROMADB localServices
     class AZURE_OPENAI azureServices
 ```
@@ -328,34 +356,42 @@ graph TB
 ### Production Azure Deployment
 
 ```mermaid
-graph TB
-    LOAD_BALANCER[Azure Load Balancer] --> APP1[Ingenious Instance 1<br/>Container Apps]
-    LOAD_BALANCER --> APP2[Ingenious Instance 2<br/>Container Apps]
-    LOAD_BALANCER --> APPN[Ingenious Instance N<br/>Container Apps]
+flowchart TB
+    LOAD_BALANCER["Azure Load Balancer"] --> APP1["Ingenious Instance 1<br/>Container Apps"]
+    LOAD_BALANCER --> APP2["Ingenious Instance 2<br/>Container Apps"]
+    LOAD_BALANCER --> APPN["Ingenious Instance N<br/>Container Apps"]
 
-    APP1 --> AZURE_SQL[Azure SQL Database<br/>Chat History]
+    APP1 --> AZURE_SQL["Azure SQL Database<br/>Chat History"]
     APP2 --> AZURE_SQL
     APPN --> AZURE_SQL
 
-    APP1 --> COSMOS_DB[Cosmos DB<br/>Document Storage]
+    APP1 --> COSMOS_DB["Cosmos DB<br/>Document Storage"]
     APP2 --> COSMOS_DB
     APPN --> COSMOS_DB
 
-    APP1 --> BLOB_STORAGE[Azure Blob Storage<br/>File Storage]
+    APP1 --> BLOB_STORAGE["Azure Blob Storage<br/>File Storage"]
     APP2 --> BLOB_STORAGE
     APPN --> BLOB_STORAGE
 
-    APP1 --> AI_SEARCH[Azure AI Search<br/>Knowledge Base]
+    APP1 --> AI_SEARCH["Azure AI Search<br/>Knowledge Base"]
     APP2 --> AI_SEARCH
     APPN --> AI_SEARCH
 
-    APP1 --> AZURE_OPENAI[Azure OpenAI<br/>LLM Service]
+    APP1 --> AZURE_OPENAI["Azure OpenAI<br/>LLM Service"]
     APP2 --> AZURE_OPENAI
     APPN --> AZURE_OPENAI
 
-    classDef azureServices fill:#e1f5fe
+    classDef loadBalancer fill:#e1f5fe,stroke:#01579b,stroke-width:3px
+    classDef appInstance fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px
+    classDef database fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+    classDef storage fill:#fff3e0,stroke:#ff9800,stroke-width:2px
+    classDef aiService fill:#fce4ec,stroke:#e91e63,stroke-width:2px
 
-    class LOAD_BALANCER,APP1,APP2,APPN,AZURE_SQL,COSMOS_DB,BLOB_STORAGE,AI_SEARCH,AZURE_OPENAI azureServices
+    class LOAD_BALANCER loadBalancer
+    class APP1,APP2,APPN appInstance
+    class AZURE_SQL,COSMOS_DB database
+    class BLOB_STORAGE,AI_SEARCH storage
+    class AZURE_OPENAI aiService
 ```
 
 This flexible architecture enables developers to start with local development using minimal dependencies (SQLite, ChromaDB) and seamlessly scale to production Azure deployments (Azure SQL, Cosmos DB, Azure AI Search, Azure Blob, Container Apps) as needed. The dual-configuration approach provides a smooth development-to-production pathway while maintaining the same API interface and conversation flows.
