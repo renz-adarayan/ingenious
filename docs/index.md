@@ -30,14 +30,6 @@ Insight Ingenious offers enterprise-grade capabilities for building sophisticate
 
     [Read Guides](guides/index.md)
 
--   __Developer Guide__
-
-    ---
-
-    Onboarding guide for developing Insight Ingenious.
-
-    [Start Contributing](development.md)
-
 </div>
 
 Built with care by the Insight Services APAC team

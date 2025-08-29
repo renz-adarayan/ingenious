@@ -5,9 +5,7 @@ This section provides detailed guides for using specific features and capabiliti
 ## Available Guides
 
 - **[Complete Azure Deployment](complete-azure-deployment.md)** - Complete enterprise deployment instructions
-- **[Document Processing](document-processing.md)** - Working with document analysis workflows
-- **[Document Chunking](document-chunking.md)** - Splitting documents into context‑aware chunks for RAG pipelines
-- **[Data & Document Preparation](data-document-preparation.md)** - Preparing data and documents for AI workflows
+- **[Custom Workflows](custom-workflows.md)** - Setting up custom workflows built on top of Ingenious.
 
 ## Prerequisites
 
