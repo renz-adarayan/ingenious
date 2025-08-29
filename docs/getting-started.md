@@ -51,35 +51,45 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
 
     **Required configuration (add to .env file)**:
     ```bash
-    # Model Configuration (only INGENIOUS_* variables are used by the system)
+    # Core AI Model Configuration (REQUIRED)
     INGENIOUS_MODELS__0__MODEL=gpt-4o-mini
     INGENIOUS_MODELS__0__API_TYPE=rest
     INGENIOUS_MODELS__0__API_VERSION=2024-12-01-preview
-    INGENIOUS_MODELS__0__DEPLOYMENT=gpt-4o-mini
+    INGENIOUS_MODELS__0__DEPLOYMENT=gpt-4o-mini-deployment
     INGENIOUS_MODELS__0__API_KEY=your-actual-api-key-here
-    INGENIOUS_MODELS__0__BASE_URL=https://your-resource.openai.azure.com/
+    INGENIOUS_MODELS__0__BASE_URL=https://eastus.api.cognitive.microsoft.com/
 
+    # For Azure OpenAI: Use the cognitive services endpoint format
+    # INGENIOUS_MODELS__0__BASE_URL=https://eastus.api.cognitive.microsoft.com/
     # For OpenAI (not Azure), use:
     # INGENIOUS_MODELS__0__BASE_URL=https://api.openai.com/v1
     # INGENIOUS_MODELS__0__API_VERSION=2024-02-01
 
-    # Basic required settings
+    # Web Server Configuration (use different port if 80 conflicts)
+    INGENIOUS_WEB_CONFIGURATION__PORT=8000
+    INGENIOUS_WEB_CONFIGURATION__IP_ADDRESS=0.0.0.0
+    INGENIOUS_WEB_CONFIGURATION__AUTHENTICATION__ENABLE=false
+
+    # Chat Service Configuration (REQUIRED)
     INGENIOUS_CHAT_SERVICE__TYPE=multi_agent
+
+    # Chat History Database (Local SQLite)
     INGENIOUS_CHAT_HISTORY__DATABASE_TYPE=sqlite
     INGENIOUS_CHAT_HISTORY__DATABASE_PATH=./.tmp/chat_history.db
     INGENIOUS_CHAT_HISTORY__MEMORY_PATH=./.tmp
 
-    # Knowledge base configuration - local ChromaDB for development (Azure AI Search available for production)
+    # Knowledge base configuration - local ChromaDB for development
     KB_POLICY=local_only
     KB_TOPK_DIRECT=3
     KB_TOPK_ASSIST=5
     KB_MODE=direct
 
-    # SQL database configuration - local SQLite for development (Azure SQL available for production)
+    # SQL database configuration - local SQLite for development
     INGENIOUS_LOCAL_SQL_DB__DATABASE_PATH=./.tmp/sample_sql.db
 
-    # Optional: Authentication settings (disabled by default for local development)
-    INGENIOUS_WEB_CONFIGURATION__AUTHENTICATION__ENABLE=false
+    # Logging Configuration
+    INGENIOUS_LOGGING__ROOT_LOG_LEVEL=info
+    INGENIOUS_LOGGING__LOG_LEVEL=info
     ```
 
 3. **Validate Configuration**:
@@ -108,12 +118,13 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
     # Start server on port 8000 (recommended for development)
     uv run ingen serve --port 8000
 
-    # For knowledge-base-agent, ensure local ChromaDB policy is set:
+    # IMPORTANT: For knowledge-base-agent to work properly with local ChromaDB:
     KB_POLICY=local_only uv run ingen serve --port 8000
 
+    # Note: Default port is 80, but port 8000 is recommended to avoid conflicts
     # Additional options:
     # --host 0.0.0.0         # Bind host (default: 0.0.0.0)
-    # --port                 # Port to bind (default: 80 or $WEB_PORT env var)
+    # --port                 # Port to bind (default: 80 or $INGENIOUS_WEB_CONFIGURATION__PORT)
     ```
 
 5. **Verify Health**:
