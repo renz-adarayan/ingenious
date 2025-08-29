@@ -331,14 +331,6 @@ except Exception as e:
     self._logger.error(f"Workflow failed: {e}")
 ```
 
-## Production Considerations
-
-1. **Performance**: Cache model clients and reuse connections
-2. **Security**: Validate all user inputs and sanitize responses
-3. **Monitoring**: Implement proper logging and metrics
-4. **Testing**: Create comprehensive test suites for your workflows
-5. **Documentation**: Document your custom workflows for team members
-
 ## Next Steps
 
 - Explore the `bike-insights` workflow template for advanced multi-agent patterns
