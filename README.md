@@ -9,7 +9,7 @@ Ingenious is a tool for quickly setting up APIs to interact with AI Agents. It f
 
 ## Quick Start
 
-Get up and running in 5 minutes with just an OpenAI API key!
+Get up and running in 5 minutes with just an Azure OpenAI API key!
 
 ### Prerequisites
 - Python 3.13 or higher (required - earlier versions are not supported)
@@ -236,25 +236,10 @@ That's it! You should see a JSON response with AI analysis of the input.
 
     # Create bike-insights test data file
     # IMPORTANT: bike-insights requires JSON data in the user_prompt field (double-encoded JSON)
-    # Method 1: Use printf for precise formatting (recommended)
     printf '%s\n' '{
       "user_prompt": "{\"revision_id\": \"test-v1\", \"identifier\": \"test-001\", \"stores\": [{\"name\": \"Test Store\", \"location\": \"NSW\", \"bike_sales\": [{\"product_code\": \"MB-TREK-2021-XC\", \"quantity_sold\": 2, \"sale_date\": \"2023-04-01\", \"year\": 2023, \"month\": \"April\", \"customer_review\": {\"rating\": 4.5, \"comment\": \"Great bike\"}}], \"bike_stock\": []}]}",
       "conversation_flow": "bike-insights"
     }' > test_bike_insights.json
-
-    # Method 2: Alternative using echo (simpler but watch for shell differences)
-    echo '{
-      "user_prompt": "{\"revision_id\": \"test-v1\", \"identifier\": \"test-001\", \"stores\": [{\"name\": \"Test Store\", \"location\": \"NSW\", \"bike_sales\": [{\"product_code\": \"MB-TREK-2021-XC\", \"quantity_sold\": 2, \"sale_date\": \"2023-04-01\", \"year\": 2023, \"month\": \"April\", \"customer_review\": {\"rating\": 4.5, \"comment\": \"Great bike\"}}], \"bike_stock\": []}]}",
-      "conversation_flow": "bike-insights"
-    }' > test_bike_insights.json
-
-    # Method 3: If heredoc is preferred, ensure proper EOF placement
-    cat > test_bike_insights.json << 'EOF'
-    {
-    "user_prompt": "{\"revision_id\": \"test-v1\", \"identifier\": \"test-001\", \"stores\": [{\"name\": \"Test Store\", \"location\": \"NSW\", \"bike_sales\": [{\"product_code\": \"MB-TREK-2021-XC\", \"quantity_sold\": 2, \"sale_date\": \"2023-04-01\", \"year\": 2023, \"month\": \"April\", \"customer_review\": {\"rating\": 4.5, \"comment\": \"Great bike\"}}], \"bike_stock\": []}]}",
-    "conversation_flow": "bike-insights"
-    }
-    EOF
 
     # Test bike-insights workflow
     curl -X POST http://localhost:8000/api/v1/chat -H "Content-Type: application/json" -d @test_bike_insights.json
@@ -271,43 +256,13 @@ That's it! You should see a JSON response with AI analysis of the input.
 
 Once you have the basic setup working with the core workflows, you can create your own custom conversation flows:
 
-🚀 **[Create Custom Workflows →](docs/guides/custom-workflows.md)**
+**[Create Custom Workflows →](docs/guides/custom-workflows.md)**
 
 Learn how to:
 - Build custom AI agents for your specific use cases
 - Implement multi-agent conversation patterns
 - Handle complex business logic and data processing
 - Deploy and test your custom workflows
-
-The custom workflow guide includes:
-- Step-by-step implementation examples
-- Complete working code samples (like a task management system)
-- Troubleshooting common issues
-- Best practices for production deployment
-
-## Workflow Categories
-
-Insight Ingenious provides multiple conversation workflows with different configuration requirements:
-
-### Core Library Workflows (Always Available)
-These workflows are built into the Ingenious library and available immediately:
-
-- `classification-agent` - Simple text classification and routing to categories (works with any OpenAI-compatible API)
-- `knowledge-base-agent` - Search and retrieve information from knowledge bases (local ChromaDB for development, Azure AI Search for production)
-- `sql-manipulation-agent` - Execute SQL queries based on natural language (local SQLite for development, Azure SQL for production)
-
-> **Note**: Core workflows support both hyphenated (`classification-agent`) and underscored (`classification_agent`) naming formats for backward compatibility.
-
-### Template Workflows (Created by `ingen init`)
-These workflows are provided as examples in the project template when you run `ingen init`:
-
-- `bike-insights` - Comprehensive bike sales analysis showcasing multi-agent coordination (**ONLY available after `ingen init`** - not included in the core library)
-
-> **Important**: The `bike-insights` workflow is NOT part of the core library. It's a template example that's created when you initialize a new project with `ingen init`. This is the recommended "Hello World" example for learning how to build custom workflows.
-
-## Troubleshooting
-
-For common issues like port conflicts, configuration errors, or workflow problems, see the [detailed troubleshooting guide](docs/getting-started/troubleshooting.md).
 
 ## Documentation
 
