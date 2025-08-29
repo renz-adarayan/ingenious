@@ -2,7 +2,7 @@ import secrets
 from typing import Annotated, Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from ingenious.auth.jwt import (
@@ -12,7 +12,7 @@ from ingenious.auth.jwt import (
     verify_token,
 )
 from ingenious.core.structured_logging import get_logger
-from ingenious.services.dependencies import get_config
+from ingenious.services.fastapi_dependencies import get_config
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -114,7 +114,7 @@ async def refresh_access_token(refresh_data: RefreshRequest) -> TokenResponse:
 
 @router.get("/verify")
 async def verify_token_endpoint(
-    token: Annotated[str, Depends(security)],
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
 ) -> Dict[str, Any]:
     """Verify if a token is valid"""
     try:
@@ -125,10 +125,10 @@ async def verify_token_endpoint(
         )
 
         # Extract token from bearer scheme
-        if not token:
+        if not credentials or not credentials.credentials:
             raise credentials_exception
 
-        username = get_username_from_token(token)
+        username = get_username_from_token(credentials.credentials)
         return {"username": username, "valid": True}
 
     except HTTPException:

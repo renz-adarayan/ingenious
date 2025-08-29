@@ -8,7 +8,6 @@ for authentication and authorization services.
 import secrets
 from typing import Optional
 
-from dependency_injector.wiring import Provide, inject
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import (
     HTTPAuthorizationCredentials,
@@ -21,16 +20,7 @@ from typing_extensions import Annotated
 from ingenious.auth.jwt import get_username_from_token
 from ingenious.config.main_settings import IngeniousSettings
 from ingenious.core.structured_logging import get_logger
-from ingenious.services.container import Container
-
-
-@inject
-def get_config(
-    config: IngeniousSettings = Provide[Container.config],
-) -> IngeniousSettings:
-    """Get config from container."""
-    return config
-
+from ingenious.services.fastapi_dependencies import get_config as _get_config
 
 logger = get_logger(__name__)
 security = HTTPBasic()
@@ -41,7 +31,7 @@ def get_security_service(
     token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_security)]
     | None = None,
     credentials: Annotated[HTTPBasicCredentials, Depends(security)] | None = None,
-    config: IngeniousSettings = Depends(get_config),
+    config: IngeniousSettings = Depends(_get_config),
 ) -> str:
     """Security service with JWT and Basic Auth support."""
     if not config.web_configuration.authentication.enable:
@@ -71,7 +61,7 @@ def get_security_service(
 
 def get_security_service_optional(
     credentials: Optional[HTTPBasicCredentials] = None,
-    config: IngeniousSettings = Depends(get_config),
+    config: IngeniousSettings = Depends(_get_config),
 ) -> Optional[str]:
     """Optional security service that doesn't require credentials when auth is disabled."""
     if not config.web_configuration.authentication.enable:
@@ -91,7 +81,7 @@ def get_security_service_optional(
 
 
 def get_auth_user(
-    request: Request, config: IngeniousSettings = Depends(get_config)
+    request: Request, config: IngeniousSettings = Depends(_get_config)
 ) -> str:
     """Get authenticated user - supports both JWT and Basic Auth."""
     if not config.web_configuration.authentication.enable:
