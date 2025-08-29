@@ -4,7 +4,7 @@ This section covers how to extend Insight Ingenious with custom components and c
 
 ## Quick Start: Create Your First Custom Workflow
 
-🚀 **New to custom workflows?** Start here:
+**New to custom workflows?** Start here:
 
 **[Complete Custom Workflow Guide →](../guides/custom-workflows.md)**
 
