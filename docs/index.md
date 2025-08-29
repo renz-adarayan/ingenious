@@ -14,29 +14,29 @@ Insight Ingenious offers enterprise-grade capabilities for building sophisticate
 
 <div class="grid cards" markdown>
 
--   :rocket:{ .lg .middle } __Quick Start__
+-   __Quick Start__
 
     ---
 
     Get up and running in minutes with our step-by-step quick start guide.
 
-    [:octicons-arrow-right-24: Get Started](getting-started.md)
+    [Get Started](getting-started.md)
 
--   :books:{ .lg .middle } __User Guides__
+-   __User Guides__
 
     ---
 
     Comprehensive guides for using all features of Insight Ingenious.
 
-    [:octicons-arrow-right-24: Read Guides](guides/index.md)
+    [Read Guides](guides/index.md)
 
--   :material-code-tags:{ .lg .middle } __Developer Guide__
+-   __Developer Guide__
 
     ---
 
     Onboarding guide for developing Insight Ingenious.
 
-    [:octicons-arrow-right-24: Start Contributing](development.md)
+    [Start Contributing](development.md)
 
 </div>
 

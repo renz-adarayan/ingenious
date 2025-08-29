@@ -212,7 +212,7 @@ Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingeniou
 {"response": "Found 3 tables in database: users, products, orders..."}
 ```
 
-**If you see error responses**, check the troubleshooting section above or the detailed [troubleshooting guide](docs/getting-started/troubleshooting.md).
+**If you see error responses**, check the troubleshooting section above or the detailed [troubleshooting guide](getting-started/troubleshooting.md).
 
 That's it! You should see a JSON response with AI analysis of the input.
 
@@ -227,25 +227,11 @@ That's it! You should see a JSON response with AI analysis of the input.
 
     # Create bike-insights test data file
     # IMPORTANT: bike-insights requires JSON data in the user_prompt field (double-encoded JSON)
-    # Method 1: Use printf for precise formatting (recommended)
+    # Use printf for precise formatting (recommended)
     printf '%s\n' '{
       "user_prompt": "{\"revision_id\": \"test-v1\", \"identifier\": \"test-001\", \"stores\": [{\"name\": \"Test Store\", \"location\": \"NSW\", \"bike_sales\": [{\"product_code\": \"MB-TREK-2021-XC\", \"quantity_sold\": 2, \"sale_date\": \"2023-04-01\", \"year\": 2023, \"month\": \"April\", \"customer_review\": {\"rating\": 4.5, \"comment\": \"Great bike\"}}], \"bike_stock\": []}]}",
       "conversation_flow": "bike-insights"
     }' > test_bike_insights.json
-
-    # Method 2: Alternative using echo (simpler but watch for shell differences)
-    echo '{
-      "user_prompt": "{\"revision_id\": \"test-v1\", \"identifier\": \"test-001\", \"stores\": [{\"name\": \"Test Store\", \"location\": \"NSW\", \"bike_sales\": [{\"product_code\": \"MB-TREK-2021-XC\", \"quantity_sold\": 2, \"sale_date\": \"2023-04-01\", \"year\": 2023, \"month\": \"April\", \"customer_review\": {\"rating\": 4.5, \"comment\": \"Great bike\"}}], \"bike_stock\": []}]}",
-      "conversation_flow": "bike-insights"
-    }' > test_bike_insights.json
-
-    # Method 3: If heredoc is preferred, ensure proper EOF placement
-    cat > test_bike_insights.json << 'EOF'
-    {
-    "user_prompt": "{\"revision_id\": \"test-v1\", \"identifier\": \"test-001\", \"stores\": [{\"name\": \"Test Store\", \"location\": \"NSW\", \"bike_sales\": [{\"product_code\": \"MB-TREK-2021-XC\", \"quantity_sold\": 2, \"sale_date\": \"2023-04-01\", \"year\": 2023, \"month\": \"April\", \"customer_review\": {\"rating\": 4.5, \"comment\": \"Great bike\"}}], \"bike_stock\": []}]}",
-    "conversation_flow": "bike-insights"
-    }
-    EOF
 
     # Test bike-insights workflow
     curl -X POST http://localhost:8000/api/v1/chat -H "Content-Type: application/json" -d @test_bike_insights.json
@@ -280,7 +266,7 @@ These workflows are provided as examples in the project template when you run `i
 
 ## Troubleshooting
 
-For common issues like port conflicts, configuration errors, or workflow problems, see the [detailed troubleshooting guide](docs/getting-started/troubleshooting.md).
+For common issues like port conflicts, configuration errors, or workflow problems, see the [detailed troubleshooting guide](getting-started/troubleshooting.md).
 
 ## Documentation
 

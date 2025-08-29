@@ -6,7 +6,7 @@ This guide walks you through creating custom conversation flows in Ingenious, ba
 
 Before creating custom workflows, ensure you have:
 
-1. **Working Ingenious installation** - Complete the [Quick Start](../../README.md) setup
+1. **Working Ingenious installation** - Complete the [Quick Start](../getting-started.md) setup
 2. **Tested core workflows** - Verify `classification-agent`, `knowledge-base-agent`, and `sql-manipulation-agent` work
 3. **Development environment** - Python 3.13+, uv package manager
 
@@ -343,5 +343,5 @@ except Exception as e:
 
 - Explore the `bike-insights` workflow template for advanced multi-agent patterns
 - Review the [Architecture Guide](../architecture.md) for deeper system understanding
-- Check the [API Documentation](../api/overview.md) for integration patterns
-- See [Deployment Guide](../deployment/overview.md) for production setup
+- Check the main documentation for integration patterns
+- See the [Complete Azure Deployment](complete-azure-deployment.md) guide for production setup

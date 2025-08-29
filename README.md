@@ -23,7 +23,7 @@ Get up and running in 5 minutes with just an Azure OpenAI API key!
 **WARNING: Audit ALL Azure CLI commands!**
 
 ```markdown
-Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingenious/guides/complete-azure-deployment/).
+Follow all steps in [this guide](https://blog.insight-services-apac.dev/ingenious/getting-started/) and [this guide](https://blog.insight-services-apac.dev/ingenious/guides/complete-azure-deployment/).
 
 - Deploy only required resources at minimal cost.
 - Use a new resource group: **<your-new-rg-name>**.
