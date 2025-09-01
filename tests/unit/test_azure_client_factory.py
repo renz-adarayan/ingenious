@@ -349,15 +349,15 @@ class TestAzureClientFactory:
                     authentication_method=AuthenticationMethod.DEFAULT_CREDENTIAL,
                 )
 
-    def test_create_cosmos_client_not_implemented(self):
-        """Test that Cosmos client creation returns NotImplemented."""
-        # This test will check the current NotImplemented behavior
+    def test_create_cosmos_client_requires_config(self):
+        """Test that Cosmos client creation requires config parameter."""
+        # This test will check that cosmos_config parameter is required
         if HAS_COSMOS:
-            result = AzureClientFactory.create_cosmos_client(
-                endpoint="https://test-cosmos.documents.azure.com:443/",
-                authentication_method=AuthenticationMethod.DEFAULT_CREDENTIAL,
-            )
-            assert result == NotImplemented
+            with pytest.raises(ValueError, match="Cosmos config is required"):
+                AzureClientFactory.create_cosmos_client(
+                    endpoint="https://test-cosmos.documents.azure.com:443/",
+                    authentication_method=AuthenticationMethod.DEFAULT_CREDENTIAL,
+                )
 
     # Search Client Tests
     @pytest.mark.skipif(not HAS_SEARCH, reason="azure-search-documents not available")
