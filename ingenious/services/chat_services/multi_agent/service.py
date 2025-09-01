@@ -156,8 +156,6 @@ class multi_agent_chat_service:
             "classification_agent",
             "knowledge_base_agent",
             "sql_manipulation_agent",
-            "product_recommendation",
-            "product_recommendation_v2",
         }
 
         if (

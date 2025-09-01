@@ -66,8 +66,6 @@ Located in `ingenious/services/chat_services/multi_agent/conversation_flows/`:
 - `classification_agent` - Text classification and sentiment analysis
 - `knowledge_base_agent` - Knowledge base search with Azure AI Search/ChromaDB
 - `sql_manipulation_agent` - Natural language SQL queries
-- `product_recommendation` - Legacy product recommendation flow
-- `product_recommendation_v2` - Updated recommendation flow
 
 ### Key Architectural Patterns
 
