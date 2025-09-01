@@ -80,32 +80,60 @@ Located in `ingenious/services/chat_services/multi_agent/conversation_flows/`:
 The `ingen` CLI (`ingenious/cli/`) provides:
 - `ingen init` - Initialize a new project with templates
 - `ingen validate` - Validate configuration
-- `ingen serve` - Start API server
+- `ingen serve` - Start API server (default port 80, use --port 8000 to avoid conflicts)
 - `ingen run-rest-api-server` - Start with custom host/port
 - `ingen test` - Run tests
+
+### Server Startup
+```bash
+# Recommended for development (avoids port 80 conflicts)
+uv run ingen serve --port 8000
+
+# With knowledge base policy for ChromaDB integration
+KB_POLICY=local_only uv run ingen serve --port 8000
+
+# For Azure AI Search integration
+KB_POLICY=azure uv run ingen serve --port 8000
+```
 
 ## Configuration
 
 Environment variables with `INGENIOUS_` prefix (using pydantic-settings):
 
 ```bash
-# Required Azure OpenAI
+# Required Azure OpenAI - use Cognitive Services endpoint format
 INGENIOUS_MODELS__0__API_KEY=your-key
-INGENIOUS_MODELS__0__BASE_URL=https://your-resource.openai.azure.com/
-INGENIOUS_MODELS__0__MODEL=gpt-4o
+INGENIOUS_MODELS__0__BASE_URL=https://eastus.api.cognitive.microsoft.com/
+INGENIOUS_MODELS__0__MODEL=gpt-4o-mini
 INGENIOUS_MODELS__0__API_VERSION=2024-12-01-preview
 INGENIOUS_MODELS__0__DEPLOYMENT=your-deployment
+INGENIOUS_MODELS__0__API_TYPE=rest
 
 # Chat service
 INGENIOUS_CHAT_SERVICE__TYPE=multi_agent
 INGENIOUS_CHAT_HISTORY__DATABASE_TYPE=sqlite  # or azuresql
 INGENIOUS_CHAT_HISTORY__DATABASE_PATH=./.tmp/chat_history.db
 
+# Web server (use port 8000 to avoid conflicts)
+INGENIOUS_WEB_CONFIGURATION__PORT=8000
+INGENIOUS_WEB_CONFIGURATION__IP_ADDRESS=0.0.0.0
+
 # Authentication (optional)
-INGENIOUS_WEB_CONFIGURATION__ENABLE_AUTHENTICATION=true
+INGENIOUS_WEB_CONFIGURATION__AUTHENTICATION__ENABLE=true
 INGENIOUS_WEB_CONFIGURATION__AUTHENTICATION__USERNAME=admin
 INGENIOUS_WEB_CONFIGURATION__AUTHENTICATION__PASSWORD=secure_password
+
+# Knowledge base configuration
+KB_POLICY=local_only  # or azure for Azure AI Search
+KB_TOPK_DIRECT=3
+KB_TOPK_ASSIST=5
+KB_MODE=direct
+
+# Local SQL database for sql-manipulation workflows
+INGENIOUS_LOCAL_SQL_DB__DATABASE_PATH=./.tmp/sample_sql.db
 ```
+
+**Important**: Use Cognitive Services endpoint format (`https://eastus.api.cognitive.microsoft.com/`) not OpenAI format (`https://your-resource.openai.azure.com/`) for Azure OpenAI.
 
 Legacy YAML migration: `uv run python scripts/migrate_config.py --yaml-file config.yml --output .env`
 
@@ -138,6 +166,9 @@ uv run pytest tests/integration/
 # Specific test markers
 uv run pytest -m "not azure_integration"  # Skip Azure tests
 uv run pytest -m unit  # Unit tests only
+uv run pytest -m slow  # Slow-running tests
+uv run pytest -m e2e   # End-to-end tests (requires external APIs)
+uv run pytest -m docs  # Document parsing tests
 
 # With verbose output
 uv run pytest -v
@@ -179,8 +210,17 @@ Supports multiple backends via repository pattern:
 
 Strict mypy configuration with:
 - `strict = true` for core library
-- Relaxed rules for tests and certain legacy modules
+- Relaxed rules for tests and certain legacy modules (multi_agent, auth, files, etc.)
 - Run `uv run mypy .` before submitting changes
+
+### Common Validation Workflow
+```bash
+# Full validation sequence before commits
+uv run mypy .                      # Type checking
+uv run pre-commit run --all-files  # Linting and formatting
+uv run pytest -m "not slow"       # Fast tests only
+uv run ingen validate              # Configuration validation
+```
 
 ## Package Features
 
