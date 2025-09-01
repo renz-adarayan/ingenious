@@ -91,13 +91,28 @@ Add these environment variables to your `.env` file:
 | `INGENIOUS_FILE_STORAGE__REVISIONS__URL` | Storage account URL | `https://yourblobstorage.blob.core.windows.net` |
 | `INGENIOUS_FILE_STORAGE__REVISIONS__TOKEN` | Connection string | `DefaultEndpointsProtocol=https;AccountName=yourblobstorage;AccountKey=YOUR_KEY;EndpointSuffix=core.windows.net` |
 
-### Get Storage Account Key
+### Get Azure Resource Information
 
 ```bash
+# Get storage account key
 az storage account keys list \
   --account-name yourblobstorage \
   --resource-group your-rg-name \
   --output table
+
+# Verify SQL server admin username (should match connection string)
+az sql server show \
+  --name your-sql-server \
+  --resource-group your-rg-name \
+  --query 'administratorLogin' \
+  --output tsv
+
+# Get SQL server FQDN for connection string
+az sql server show \
+  --name your-sql-server \
+  --resource-group your-rg-name \
+  --query 'fullyQualifiedDomainName' \
+  --output tsv
 ```
 
 ## Upload Prompt Templates
