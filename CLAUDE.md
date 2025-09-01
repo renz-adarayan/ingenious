@@ -2,9 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Repository Context
+
+This is the **ingenious** package - a core AI agent framework library (v0.2.5) that's part of a monorepo. The sister project `mrwa-defect-chat` (in `../mrwa-defect-chat/`) demonstrates production usage with Azure integrations.
+
 ## Package Management
 
-This project uses **uv** for Python package and environment management. Python 3.13+ is required.
+Uses **uv** for Python package and environment management. Python 3.13+ is required.
 
 ### Common Commands
 
@@ -12,152 +16,222 @@ This project uses **uv** for Python package and environment management. Python 3
 # Install/sync dependencies
 uv sync
 
-# Add dependencies
+# Add/remove dependencies
 uv add <package>                 # Regular dependency
 uv add <package> --dev           # Development dependency
-
-# Remove dependencies
 uv remove <package>
-uv remove <package> --group dev
 
 # Run commands in environment
-uv run <command>                 # Execute any command
 uv run pytest                    # Run all tests
 uv run pytest tests/unit/test_specific.py  # Run single test file
 uv run pytest tests/unit/test_specific.py::TestClass::test_method  # Run specific test
 
 # Type checking and linting
-uv run mypy .                    # Type checking
-uv run pre-commit run --all-files  # Run all linting checks
+uv run mypy .                    # Type checking (strict mode enabled)
+uv run pre-commit run --all-files  # All linting checks
 
 # View dependency tree
 uv tree
 ```
 
-## CLI Commands (ingen)
+## Building and Testing
 
-The `ingen` CLI provides these commands:
-- `ingen init` - Initialize a new project
-- `ingen validate` - Validate configuration
-- `ingen serve` - Start API server (defaults to port 8000)
-- `ingen workflows` - List available workflows
-- `ingen prompt-tuner` - Tune prompts
-- `ingen test` - Run tests
-- `ingen azure-search <query>` - Query Azure search
-- `ingen run-rest-api-server` - Start with custom host/port
+```bash
+# Run tests with coverage
+uv run pytest --cov=ingenious
+
+# Type checking (strict mode enabled)
+uv run mypy .
+
+# Linting (uses ruff)
+uv run pre-commit run --all-files
+
+# Build package
+uv build
+```
 
 ## High-Level Architecture
 
 ### Core Components
 
-**FastAPI Application** (`ingenious/main/app_factory.py`)
-- Main API application factory using dependency injection
-- RESTful endpoints with OpenAPI documentation
-- JWT/Basic auth middleware (`ingenious/auth/`)
+- **FastAPI Server** (`ingenious/main/app_factory.py`) - Main API application factory using dependency injection
+- **Multi-Agent System** (`ingenious/services/chat_services/multi_agent/`) - AutoGen-based agent orchestration
+- **Conversation Flows** (`services/chat_services/multi_agent/conversation_flows/`) - Pluggable workflow patterns
+- **Dependency Injection** (`ingenious/services/container.py`) - Uses dependency-injector for IoC container
+- **Configuration** - Pydantic-settings based (`ingenious/config/`) with `INGENIOUS_*` environment variables
 
-**Multi-Agent System** (`ingenious/services/chat_services/multi_agent/`)
-- AutoGen-based agent orchestration
-- Sequential and parallel conversation patterns
-- Token tracking with configurable limits
+### Built-in Conversation Flows
 
-**Conversation Flows** (`conversation_flows/`)
-- Pluggable workflow patterns implementing `IConversationFlow` interface
-- Each flow must have a `ConversationFlow` class with `get_conversation_response` method
-- Auto-discovered by name match with `conversation_flow` parameter
+Located in `ingenious/services/chat_services/multi_agent/conversation_flows/`:
+- `classification_agent` - Text classification and sentiment analysis
+- `knowledge_base_agent` - Knowledge base search with Azure AI Search/ChromaDB
+- `sql_manipulation_agent` - Natural language SQL queries
 
-**Configuration System**
-- Environment variables with `INGENIOUS_` prefix
-- Pydantic-settings based validation (`ingenious/config/`)
-- Migration script for legacy YAML: `scripts/migrate_config.py`
+### Key Architectural Patterns
 
-**Storage Layer**
 - Repository pattern for data access (`ingenious/db/`)
-- Supports SQLite (default), Azure SQL, Cosmos DB
-- Connection pooling via `ingenious/db/connection_pool.py`
+- Service layer for business logic (`ingenious/services/`)
+- Structured logging with correlation IDs (`ingenious/core/structured_logging.py`)
+- JWT/Basic auth middleware (`ingenious/auth/`)
+- Azure service builders with authentication (`ingenious/client/azure/`)
 
-### Key Patterns
+## CLI Commands
 
-- **Dependency Injection**: Uses dependency-injector for IoC container (`ingenious/services/container.py`)
-- **Service Layer**: Business logic in `ingenious/services/`
-- **Structured Logging**: Correlation IDs for tracing (`ingenious/core/structured_logging.py`)
-- **Azure Builders**: Factory pattern for Azure service clients (`ingenious/client/azure/`)
+The `ingen` CLI (`ingenious/cli/`) provides:
+- `ingen init` - Initialize a new project with templates
+- `ingen validate` - Validate configuration
+- `ingen serve` - Start API server (default port 80, use --port 8000 to avoid conflicts)
+- `ingen run-rest-api-server` - Start with custom host/port
+- `ingen test` - Run tests
 
-## Testing
-
+### Server Startup
 ```bash
-# Run all tests with coverage
-uv run pytest --cov=ingenious --cov-report=html
+# Recommended for development (avoids port 80 conflicts)
+uv run ingen serve --port 8000
 
-# Run specific test categories
-uv run pytest tests/unit/           # Unit tests only
-uv run pytest -m "not azure_integration"  # Skip Azure integration tests
+# With knowledge base policy for ChromaDB integration
+KB_POLICY=local_only uv run ingen serve --port 8000
 
-# Type checking (strict mode enabled)
-uv run mypy .
-
-# Pre-commit hooks (install first time)
-uv run pre-commit install
-uv run pre-commit run --all-files
+# For Azure AI Search integration
+KB_POLICY=azure uv run ingen serve --port 8000
 ```
 
 ## Configuration
 
-Required environment variables for basic setup:
+Environment variables with `INGENIOUS_` prefix (using pydantic-settings):
 
 ```bash
-# Azure OpenAI (required)
+# Required Azure OpenAI - use Cognitive Services endpoint format
 INGENIOUS_MODELS__0__API_KEY=your-key
-INGENIOUS_MODELS__0__BASE_URL=https://your-resource.openai.azure.com/
-INGENIOUS_MODELS__0__MODEL=gpt-4o
+INGENIOUS_MODELS__0__BASE_URL=https://eastus.api.cognitive.microsoft.com/
+INGENIOUS_MODELS__0__MODEL=gpt-4o-mini
 INGENIOUS_MODELS__0__API_VERSION=2024-12-01-preview
 INGENIOUS_MODELS__0__DEPLOYMENT=your-deployment
+INGENIOUS_MODELS__0__API_TYPE=rest
 
 # Chat service
 INGENIOUS_CHAT_SERVICE__TYPE=multi_agent
-INGENIOUS_CHAT_HISTORY__DATABASE_TYPE=sqlite
+INGENIOUS_CHAT_HISTORY__DATABASE_TYPE=sqlite  # or azuresql
 INGENIOUS_CHAT_HISTORY__DATABASE_PATH=./.tmp/chat_history.db
 
-# Port (if default 8000 is in use)
-INGENIOUS_WEB_CONFIGURATION__PORT=8081
+# Web server (use port 8000 to avoid conflicts)
+INGENIOUS_WEB_CONFIGURATION__PORT=8000
+INGENIOUS_WEB_CONFIGURATION__IP_ADDRESS=0.0.0.0
 
 # Authentication (optional)
-INGENIOUS_WEB_CONFIGURATION__ENABLE_AUTHENTICATION=false
+INGENIOUS_WEB_CONFIGURATION__AUTHENTICATION__ENABLE=true
+INGENIOUS_WEB_CONFIGURATION__AUTHENTICATION__USERNAME=admin
+INGENIOUS_WEB_CONFIGURATION__AUTHENTICATION__PASSWORD=secure_password
+
+# Knowledge base configuration
+KB_POLICY=local_only  # or azure for Azure AI Search
+KB_TOPK_DIRECT=3
+KB_TOPK_ASSIST=5
+KB_MODE=direct
+
+# Local SQL database for sql-manipulation workflows
+INGENIOUS_LOCAL_SQL_DB__DATABASE_PATH=./.tmp/sample_sql.db
 ```
 
-## Adding New Conversation Flows
+**Important**: Use Cognitive Services endpoint format (`https://eastus.api.cognitive.microsoft.com/`) not OpenAI format (`https://your-resource.openai.azure.com/`) for Azure OpenAI.
 
-1. Create flow module in `services/chat_services/multi_agent/conversation_flows/your_flow/`
-2. Implement `ConversationFlow` class with `get_conversation_response` method
-3. Define agents inline or import from `ingenious/models/agent.py`
+Legacy YAML migration: `uv run python scripts/migrate_config.py --yaml-file config.yml --output .env`
+
+## Development Workflow
+
+### Adding New Conversation Flows
+
+1. Create flow module in `ingenious_extensions/services/chat_services/multi_agent/conversation_flows/your_flow/`
+2. Implement `IConversationFlow` interface with `get_conversation_response` method
+3. Define agents inline or import from `ingenious/models/ag_agents/`
 4. Create Jinja2 prompt templates in `templates/prompts/`
 5. Flow is auto-discovered by name match with `conversation_flow` parameter
 
-## API Testing
+### Project Template
+
+Running `ingen init` creates:
+- `ingenious_extensions/` directory with example `bike-insights` workflow
+- Templates directory with Jinja2 prompts
+- Sample configuration files
+
+### Testing
 
 ```bash
-# Health check
-curl http://localhost:8000/api/v1/health
+# Unit tests only
+uv run pytest tests/unit/
 
-# Chat endpoint (with auth disabled)
-curl -X POST http://localhost:8000/api/v1/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_prompt": "Your question here",
-    "conversation_flow": "classification_agent",
-    "thread_id": "test123"
-  }'
+# Integration tests (requires Azure credentials)
+uv run pytest tests/integration/
+
+# Specific test markers
+uv run pytest -m "not azure_integration"  # Skip Azure tests
+uv run pytest -m unit  # Unit tests only
+uv run pytest -m slow  # Slow-running tests
+uv run pytest -m e2e   # End-to-end tests (requires external APIs)
+uv run pytest -m docs  # Document parsing tests
+
+# With verbose output
+uv run pytest -v
+
+# Coverage report
+uv run pytest --cov=ingenious --cov-report=html
 ```
 
-## Core Workflows (Built-in)
+## Database Integration
 
-- `classification_agent` - Text classification
-- `knowledge_base_agent` - Knowledge base search with Azure AI Search
-- `sql_manipulation_agent` - Natural language SQL queries
+Supports multiple backends via repository pattern:
+- **SQLite** (default) - Local development
+- **Azure SQL** - Production deployment via pyodbc
+- **Cosmos DB** - Document storage
+- **ChromaDB** - Vector database for embeddings
+- Connection pooling via `ingenious/db/connection_pool.py`
 
-## Development Tips
+## Azure Service Integration
 
-- Enable debug logging: Set `INGENIOUS_LOG_LEVEL=DEBUG`
-- Check correlation IDs in structured JSON logs
-- API docs available at `/docs` endpoint
-- Always validate config before starting: `uv run ingen validate`
-- Test payloads saved in `test_payloads/` directory
+### Azure Search (`ingenious/services/azure_search/`)
+- Classic retrieval with BM25
+- Document fusion (DAT)
+- Semantic reranking
+- Generative answering (RAG)
+- CLI tool: `uv run azure-search "query"`
+
+### Azure Blob Storage (`ingenious/files/azure/`)
+- Prompt template storage
+- Document upload/download
+- File summarization support
+
+### Azure Authentication (`ingenious/client/azure/`)
+- Service principal support
+- Managed identity
+- Interactive browser auth
+- Connection string auth
+
+## Type Safety
+
+Strict mypy configuration with:
+- `strict = true` for core library
+- Relaxed rules for tests and certain legacy modules (multi_agent, auth, files, etc.)
+- Run `uv run mypy .` before submitting changes
+
+### Common Validation Workflow
+```bash
+# Full validation sequence before commits
+uv run mypy .                      # Type checking
+uv run pre-commit run --all-files  # Linting and formatting
+uv run pytest -m "not slow"       # Fast tests only
+uv run ingen validate              # Configuration validation
+```
+
+## Package Features
+
+Install groups (via `uv add "ingenious[group]"`):
+- `minimal` - Basic API functionality only
+- `core` - Common production functionality
+- `auth` - Authentication and security
+- `azure` - Azure cloud integrations
+- `ai` - AI and agent functionality
+- `database` - Database connectivity
+- `ui` - Web UI with Flask
+- `standard` - Core + auth + AI + database
+- `azure-full` - Full Azure integration (recommended)
+- `full` - All features including document processing and ML

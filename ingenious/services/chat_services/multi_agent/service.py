@@ -150,6 +150,24 @@ class multi_agent_chat_service:
 
         # Normalize workflow name to support both formats
         normalized_flow = normalize_workflow_name(self.conversation_flow)
+
+        # Check if built-in workflows are disabled and this is a built-in workflow
+        builtin_workflows = {
+            "classification_agent",
+            "knowledge_base_agent",
+            "sql_manipulation_agent",
+        }
+
+        if (
+            not self.config.chat_service.enable_builtin_workflows
+            and normalized_flow in builtin_workflows
+        ):
+            raise ValueError(
+                f"Built-in workflow '{self.conversation_flow}' is disabled. "
+                f"Set INGENIOUS_CHAT_SERVICE__ENABLE_BUILTIN_WORKFLOWS=true to enable built-in workflows, "
+                f"or use a custom workflow from ingenious_extensions."
+            )
+
         module_name = f"services.chat_services.multi_agent.conversation_flows.{normalized_flow}.{normalized_flow}"
         class_name = "ConversationFlow"
 

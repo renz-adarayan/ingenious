@@ -43,12 +43,27 @@ Set up ingenious locally first and then migrate to Azure services as shown in th
     # Set up the uv project
     uv init
 
-    # Choose installation based on features needed
-    uv add "ingenious[azure-full]" # Recommended: Full Azure integration (core, auth, azure, ai, database, ui)
-    # OR
-    uv add "ingenious[standard]" # for local testing: includes SQL agent support (core, auth, ai, database)
-    # OR for nightly builds
-    uv add --index-url https://test.pypi.org/simple/ "ingenious[azure-full]"
+    # Choose installation based on features needed:
+
+    # Basic API server only (33 packages)
+    uv add "ingenious"
+
+    # Standard production setup with auth + AI + database (86 packages)
+    uv add "ingenious[standard]"
+
+    # Full Azure cloud integration (recommended for production)
+    uv add "ingenious[azure-full]"
+
+    # Everything including document processing and ML
+    uv add "ingenious[full]"
+
+    # Or build your own combination:
+    # uv add "ingenious[core,auth,ai]"           # Basic AI workflows with auth
+    # uv add "ingenious[ai,knowledge-base]"      # AI + vector search only
+    # uv add "ingenious[azure,database]"         # Azure + database without AI
+
+    # For nightly builds, add --index-url prefix:
+    # uv add --index-url https://test.pypi.org/simple/ "ingenious[azure-full]"
 
     # Initialize project in the current directory
     uv run ingen init
@@ -88,6 +103,9 @@ Set up ingenious locally first and then migrate to Azure services as shown in th
     # Chat Service Configuration (REQUIRED)
     INGENIOUS_CHAT_SERVICE__TYPE=multi_agent
 
+    # Production: Disable built-in workflows (optional)
+    # INGENIOUS_CHAT_SERVICE__ENABLE_BUILTIN_WORKFLOWS=false
+
     # Chat History Database (Local SQLite)
     INGENIOUS_CHAT_HISTORY__DATABASE_TYPE=sqlite
     INGENIOUS_CHAT_HISTORY__DATABASE_PATH=./.tmp/chat_history.db
@@ -112,7 +130,10 @@ Set up ingenious locally first and then migrate to Azure services as shown in th
     uv run ingen validate  # Check configuration before starting
     ```
 
-    **Expected validation output**: You should see confirmation that your configuration is valid and a count of available workflows (typically showing 4/4 workflows working: classification-agent, knowledge-base-agent, sql-manipulation-agent, and bike-insights after `ingen init`).
+    **Expected validation output**: You should see confirmation that your configuration is valid and a count of available workflows:
+    - **Minimal install**: 0/3 workflows (requires `[ai]` group for workflow functionality)
+    - **Standard install**: 3/4 workflows (classification-agent, sql-manipulation-agent working; knowledge-base-agent requires `[knowledge-base]` group)
+    - **Azure-full install**: 4/4 workflows working (classification-agent, knowledge-base-agent, sql-manipulation-agent, and bike-insights after `ingen init`)
 
     **If validation fails with port conflicts**:
     ```bash
@@ -251,9 +272,10 @@ That's it! You should see a JSON response with AI analysis of the input.
     **Expected bike-insights response**: JSON with comprehensive bike sales analysis from multiple agents (fiscal analysis, customer sentiment, summary, and bike lookup).
 
 **Important Notes**:
-- **Core Library Workflows** (`classification-agent`, `knowledge-base-agent`, `sql-manipulation-agent`) are always available and accept simple text prompts
+- **Core Library Workflows** (`classification-agent`, `knowledge-base-agent`, `sql-manipulation-agent`) are available by default and accept simple text prompts
 - **Template Workflows** like `bike-insights` require JSON-formatted data with specific fields and are only available after running `ingen init`
 - The `bike-insights` workflow is the recommended "Hello World" example for new users
+- **Production Security**: Set `INGENIOUS_CHAT_SERVICE__ENABLE_BUILTIN_WORKFLOWS=false` to disable built-in workflows and expose only your custom `ingenious_extensions` workflows
 
 ## Next Steps: Creating Custom Workflows
 

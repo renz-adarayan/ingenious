@@ -149,6 +149,12 @@ class ChatServiceSettings(BaseModel):
         description="Chat service type: 'multi_agent' for agent workflows",
     )
 
+    enable_builtin_workflows: bool = Field(
+        True,
+        description="Enable built-in workflows (classification-agent, knowledge-base-agent, sql-manipulation-agent). "
+        "Set to false in production to expose only custom ingenious_extensions workflows.",
+    )
+
 
 class ToolServiceSettings(BaseModel):
     """Configuration for external tool integrations.

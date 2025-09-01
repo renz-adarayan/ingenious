@@ -93,18 +93,25 @@ def get_dir_roots() -> List[Path]:
     return [extensions_dir, extensions_template_dir, ingenious_dir]
 
 
-def get_namespaces() -> List[str]:
+def get_namespaces(include_builtin: bool = True) -> List[str]:
     """
     Get ordered list of namespaces to search for modules.
+
+    Args:
+        include_builtin: Whether to include built-in workflows from 'ingenious' namespace
 
     Returns:
         List of namespace strings in priority order
     """
-    return [
+    namespaces = [
         "ingenious_extensions",
         "ingenious.ingenious_extensions_template",
-        "ingenious",
     ]
+
+    if include_builtin:
+        namespaces.append("ingenious")
+
+    return namespaces
 
 
 def get_file_from_namespace_with_fallback(
@@ -184,7 +191,9 @@ class WorkflowDiscovery:
         self._workflow_cache: Optional[List[str]] = None
         self._metadata_cache: Dict[str, Dict[str, Any]] = {}
 
-    def discover_workflows(self, force_refresh: bool = False) -> List[str]:
+    def discover_workflows(
+        self, force_refresh: bool = False, include_builtin: bool = True
+    ) -> List[str]:
         """
         Dynamically discover all available workflows from all namespaces.
 
@@ -193,15 +202,21 @@ class WorkflowDiscovery:
 
         Args:
             force_refresh: Whether to force refresh the cached results
+            include_builtin: Whether to include built-in workflows from 'ingenious' namespace
 
         Returns:
             list: A list of workflow names (normalized with underscores)
         """
-        if self._workflow_cache is not None and not force_refresh:
-            return self._workflow_cache
+        # Use cache key that includes the include_builtin parameter
+        cache_key = f"workflows_{include_builtin}"
+        if not hasattr(self, "_workflow_caches"):
+            self._workflow_caches = {}
+
+        if cache_key in self._workflow_caches and not force_refresh:
+            return self._workflow_caches[cache_key]
 
         workflows: Set[str] = set()
-        namespaces = get_namespaces()
+        namespaces = get_namespaces(include_builtin=include_builtin)
 
         for namespace in namespaces:
             try:
@@ -236,8 +251,14 @@ class WorkflowDiscovery:
                 continue
 
         # Convert to sorted list and cache
-        self._workflow_cache = sorted(list(workflows))
-        return self._workflow_cache
+        result = sorted(list(workflows))
+        self._workflow_caches[cache_key] = result
+
+        # Also update the old cache for backward compatibility
+        if include_builtin:
+            self._workflow_cache = result
+
+        return result
 
     def _validate_workflow(self, flows_module_name: str, workflow_name: str) -> bool:
         """
@@ -372,9 +393,16 @@ _workflow_discovery = WorkflowDiscovery()
 
 
 # Public API functions
-def discover_workflows(force_refresh: bool = False) -> List[str]:
-    """Discover all available workflows."""
-    return _workflow_discovery.discover_workflows(force_refresh)
+def discover_workflows(
+    force_refresh: bool = False, include_builtin: bool = True
+) -> List[str]:
+    """Discover all available workflows.
+
+    Args:
+        force_refresh: Whether to force refresh the cached results
+        include_builtin: Whether to include built-in workflows from 'ingenious' namespace
+    """
+    return _workflow_discovery.discover_workflows(force_refresh, include_builtin)
 
 
 def get_workflow_metadata(workflow_name: str) -> Dict[str, Any]:

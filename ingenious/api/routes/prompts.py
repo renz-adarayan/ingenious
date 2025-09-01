@@ -55,7 +55,10 @@ def list_revisions(
 
         # If no revisions found via path parsing, try to discover from workflows
         if not revision_ids:
-            workflows = discover_workflows()
+            config = igen_deps.get_config()
+            workflows = discover_workflows(
+                include_builtin=config.chat_service.enable_builtin_workflows
+            )
             for workflow in workflows:
                 # Check if this workflow has prompts
                 workflow_path = asyncio.run(fs.get_prompt_template_path(workflow))
@@ -88,7 +91,10 @@ def list_workflows_for_prompts(
     List all available workflows that have prompt templates.
     """
     try:
-        workflows = discover_workflows()
+        config = igen_deps.get_config()
+        workflows = discover_workflows(
+            include_builtin=config.chat_service.enable_builtin_workflows
+        )
         workflows_with_prompts = []
 
         for workflow in workflows:
