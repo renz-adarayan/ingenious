@@ -4768,6 +4768,17 @@ wheels = [
 ]
 
 [[package]]
+name = "test-dir"
+version = "0.1.0"
+source = { virtual = "test_dir" }
+dependencies = [
+    { name = "ingenious", extra = ["azure-full"] },
+]
+
+[package.metadata]
+requires-dist = [{ name = "ingenious", extras = ["azure-full"], editable = "." }]
+
+[[package]]
 name = "threadpoolctl"
 version = "3.6.0"
 source = { registry = "https://pypi.org/simple" }

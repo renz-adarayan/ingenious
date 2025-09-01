@@ -88,6 +88,9 @@ Set up ingenious locally first and then migrate to Azure services as shown in th
     # Chat Service Configuration (REQUIRED)
     INGENIOUS_CHAT_SERVICE__TYPE=multi_agent
 
+    # Production: Disable built-in workflows (optional)
+    # INGENIOUS_CHAT_SERVICE__ENABLE_BUILTIN_WORKFLOWS=false
+
     # Chat History Database (Local SQLite)
     INGENIOUS_CHAT_HISTORY__DATABASE_TYPE=sqlite
     INGENIOUS_CHAT_HISTORY__DATABASE_PATH=./.tmp/chat_history.db
@@ -251,9 +254,10 @@ That's it! You should see a JSON response with AI analysis of the input.
     **Expected bike-insights response**: JSON with comprehensive bike sales analysis from multiple agents (fiscal analysis, customer sentiment, summary, and bike lookup).
 
 **Important Notes**:
-- **Core Library Workflows** (`classification-agent`, `knowledge-base-agent`, `sql-manipulation-agent`) are always available and accept simple text prompts
+- **Core Library Workflows** (`classification-agent`, `knowledge-base-agent`, `sql-manipulation-agent`) are available by default and accept simple text prompts
 - **Template Workflows** like `bike-insights` require JSON-formatted data with specific fields and are only available after running `ingen init`
 - The `bike-insights` workflow is the recommended "Hello World" example for new users
+- **Production Security**: Set `INGENIOUS_CHAT_SERVICE__ENABLE_BUILTIN_WORKFLOWS=false` to disable built-in workflows and expose only your custom `ingenious_extensions` workflows
 
 ## Next Steps: Creating Custom Workflows
 

@@ -45,7 +45,9 @@ async def workflow_status(
         normalized_workflow_name = normalize_workflow_name(workflow_name)
 
         # Discover available workflows dynamically
-        available_workflows = discover_workflows()
+        available_workflows = discover_workflows(
+            include_builtin=config.chat_service.enable_builtin_workflows
+        )
 
         # Check against normalized name
         if normalized_workflow_name not in available_workflows:
@@ -168,8 +170,12 @@ async def list_workflows(
     Dynamically discovers workflows from all namespaces.
     """
     try:
+        config = igen_deps.get_config()
+
         # Dynamically discover all available workflows
-        discovered_workflows = discover_workflows()
+        discovered_workflows = discover_workflows(
+            include_builtin=config.chat_service.enable_builtin_workflows
+        )
 
         workflow_statuses = []
         for workflow in discovered_workflows:

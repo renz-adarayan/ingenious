@@ -83,6 +83,7 @@ Add these environment variables to your `.env` file:
 | `INGENIOUS_AZURE_SQL_SERVICES__DATABASE_CONNECTION_STRING` | SQL connection string | `Driver={ODBC Driver 18 for SQL Server};Server=tcp:your-sql-server.database.windows.net,1433;Database=ingenious-db;Uid=ingenious;Pwd=YOUR_PASSWORD;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;` |
 | `INGENIOUS_AZURE_SQL_SERVICES__DATABASE_NAME` | Database name | `ingenious-db` |
 | `INGENIOUS_AZURE_SQL_SERVICES__TABLE_NAME` | Chat history table | `chat_history` |
+| `INGENIOUS_CHAT_SERVICE__ENABLE_BUILTIN_WORKFLOWS` | **Production Security**: Disable built-in workflows | `false` |
 | `INGENIOUS_FILE_STORAGE__REVISIONS__ENABLE` | Enable file storage | `true` |
 | `INGENIOUS_FILE_STORAGE__REVISIONS__STORAGE_TYPE` | Storage type | `azure` |
 | `INGENIOUS_FILE_STORAGE__REVISIONS__CONTAINER_NAME` | Container name | `prompts` |
@@ -115,6 +116,36 @@ for file in templates/prompts/quickstart-1/*.jinja; do
     --auth-mode key \
     --overwrite
 done
+```
+
+## Production Security Configuration
+
+### Disable Built-in Workflows (Recommended for Production)
+
+For production deployments, you can disable the built-in workflows (`classification-agent`, `knowledge-base-agent`, `sql-manipulation-agent`) to expose only your custom workflows from `ingenious_extensions`:
+
+```bash
+# Add to your .env file for production security
+INGENIOUS_CHAT_SERVICE__ENABLE_BUILTIN_WORKFLOWS=false
+```
+
+**Testing the Security Setting:**
+
+```bash
+# Test that built-in workflows are blocked (should return error)
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Basic $(echo -n 'username:password' | base64)" \
+  -d '{"user_prompt": "Test", "conversation_flow": "classification-agent", "thread_id": "test"}'
+
+# Expected error response:
+# {"detail":"Built-in workflow 'classification-agent' is disabled. Set INGENIOUS_CHAT_SERVICE__ENABLE_BUILTIN_WORKFLOWS=true to enable built-in workflows, or use a custom workflow from ingenious_extensions."}
+
+# Custom workflows still work:
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Basic $(echo -n 'username:password' | base64)" \
+  -d '{"user_prompt": "Test", "conversation_flow": "your-custom-workflow", "thread_id": "test"}'
 ```
 
 ## Verification
