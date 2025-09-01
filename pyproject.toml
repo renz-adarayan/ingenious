@@ -20,44 +20,19 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 requires-python = ">=3.13"
-# Minimal core dependencies - essential for basic library functionality
+# Minimal core dependencies - essential for basic API and CLI functionality
 dependencies = [
-  "aiohttp==3.12.15",
   "aiofiles>=24.1.0",
-  "ats>=1.0.8",
-  "autogen-agentchat>=0.5.7",
-  "autogen-ext>=0.5.7",
-  "azure-core==1.34.0",
-  "azure-cosmos>=4.9.0",
-  "azure-identity>=1.17.1",
-  "azure-keyvault-secrets>=4.10.0",
-  "azure-search-documents>=11.5.2",
-  "azure-storage-blob>=12.25.1",
-  "chromadb>=1.0.11",
+  "aiohttp==3.12.15",
   "dependency-injector==4.48.1",
   "fastapi==0.115.9",
-  "flask>=3.1.1",
-  "jsonpickle==4.1.1",
-  "markdown>=3.8.2",
-  "openai>=1.82.0",
-  "pandas>=2.3.1",
-  "passlib>=1.7.4",
-  "psutil>=7.0.0",
   "pydantic==2.11.5",
   "pydantic-settings>=2.10.1",
-  "pyodbc>=5.2.0",
   "python-dotenv>=1.0.1",
-  "python-jose>=3.5.0",
   "rich==13.7.1",
   "structlog==25.4.0",
-  "tiktoken>=0.9.0",
   "typer==0.16.0",
   "uvicorn>=0.35.0",
-  "mkdocs-nav-weight>=0.2.0",
-  "mkdocs-table-reader-plugin>=3.1.0",
-  "mkdocs-redirects>=1.2.2",
-  "mkdocs-git-revision-date-localized-plugin>=1.4.7",
-  "mkdocs-minify-plugin>=0.8.0",
 ]
 
 [project.urls]
@@ -94,12 +69,115 @@ dev = [
 ]
 
 [project.optional-dependencies]
-# Minimal installation - basic API functionality only
-minimal = []
+# Core features - common production functionality
+core = [
+  "aiosqlite==0.21.0",
+  "fastapi-cli==0.0.7",
+  "jinja2==3.1.6",
+  "jsonpickle==4.1.1",
+  "markdown>=3.8.2",
+  "pandas>=2.3.1",
+]
 
+# Authentication and security features
+auth = [
+  "bcrypt==4.3.0",
+  "passlib>=1.7.4",
+  "python-jose[cryptography]>=3.5.0"
+]
+
+# Azure cloud integrations
+azure = [
+  "azure-core==1.34.0",
+  "azure-cosmos>=4.9.0",
+  "azure-identity>=1.17.1",
+  "azure-keyvault-secrets>=4.10.0",
+  "azure-search-documents>=11.5.2",
+  "azure-storage-blob>=12.25.1",
+]
+
+# AI and agent functionality
+ai = [
+  "ats>=1.0.8",
+  "autogen-agentchat>=0.5.7",
+  "autogen-ext>=0.5.7",
+  "openai>=1.82.0",
+  "tiktoken>=0.9.0",
+]
+
+# Database connectivity
+database = [
+  "pyodbc>=5.2.0",
+  "psutil>=7.0.0"
+]
+
+# Knowledge base and vector search
+knowledge-base = [
+  "chromadb>=1.0.11"
+]
+
+# Web UI
+ui = [
+  "flask>=3.1.1"
+]
+
+# Document processing capabilities
+document-processing = [
+  "pymupdf==1.26.1",
+  "azure-ai-documentintelligence==1.0.2",
+]
+
+# Advanced document processing
+document-advanced = [
+  "pdfminer.six==20250506",
+  "unstructured[all-docs]==0.17.2"
+]
+
+# Document chunking and processing
+chunk = [
+  "jsonlines==3.1.0",
+  "langchain-experimental==0.3.4",
+  "langchain-openai==0.3.0",
+  "langchain-text-splitters==0.3.0",
+  "regex==2024.11.6",
+  "xxhash==3.5.0",
+  "ijson==3.2.3",
+]
+
+# Machine learning and embeddings
+ml = [
+  "sentence-transformers==5.0.0"
+]
+
+# Data preparation and scraping
+dataprep = [
+  "scrapfly-sdk==0.8.23",
+  "backoff==2.2.0"
+]
+
+# Visualization and plotting
+visualization = [
+  "matplotlib==3.10.3",
+  "seaborn==0.13.2"
+]
+
+# Development tools
+development = [
+  "ipython==9.2.0"
+]
+
+# Documentation building
+docs = [
+  "mkdocs-nav-weight>=0.2.0",
+  "mkdocs-table-reader-plugin>=3.1.0",
+  "mkdocs-redirects>=1.2.2",
+  "mkdocs-git-revision-date-localized-plugin>=1.4.7",
+  "mkdocs-minify-plugin>=0.8.0",
+]
+
+# Testing dependencies
 test = [
   "httpx==0.28.1",
-  "jsonpickle==4.1.1",
   "mypy==1.16.1",
   "pip-audit==2.9.0",
   "pre-commit==4.2.0",
@@ -119,84 +197,31 @@ test = [
   "hypothesis==6.136.2"
 ]
 
-# Core features - common production functionality
-core = [
-  "aiosqlite==0.21.0",
-  "fastapi-cli==0.0.7",
-  "jinja2==3.1.6",
-  "python-dotenv==1.0.1",
+# ============================================================================
+# COMPOUND GROUPS - Common installation patterns
+# ============================================================================
+
+# Minimal installation - basic API functionality only
+minimal = []
+
+# Standard production deployment (most common setup)
+standard = [
+  "ingenious[core,auth,ai,database]"
 ]
-
-# Authentication and security features
-auth = ["bcrypt==4.3.0", "passlib==1.7.4", "python-jose[cryptography]==3.5.0"]
-
-# Azure cloud integrations
-azure = [
-  "azure-core==1.34.0",
-  "azure-cosmos==4.9.0",
-  "azure-identity==1.17.1",
-  "azure-keyvault==4.2.0",
-  "azure-search-documents==11.5.2",
-  "azure-storage-blob==12.25.1",
-]
-
-# AI and agent functionality
-ai = [
-  "autogen-agentchat==0.5.7",
-  "autogen-ext[openai]==0.5.7",
-  "openai==1.82.0",
-]
-
-# Database connectivity
-database = ["pyodbc==5.2.0", "psutil==7.0.0"]
-
-# Web UI
-ui = ["flask==3.1.1"]
-
-# Document processing capabilities
-document-processing = [
-  "pymupdf==1.26.1",
-  "azure-ai-documentintelligence==1.0.2",
-  "psutil==7.0.0",
-]
-
-# Advanced document processing
-document-advanced = ["pdfminer.six==20250506", "unstructured[all-docs]==0.17.2"]
-
-chunk = [
-  "jsonlines==3.1.0",
-  "langchain-experimental==0.3.4",
-  "langchain-openai==0.3.0",
-  "langchain-text-splitters==0.3.0",
-  "regex==2024.11.6",
-  "xxhash==3.5.0",
-  "ijson==3.2.3",
-]
-
-# ML and embeddings
-ml = ["chromadb==1.0.11", "sentence-transformers==5.0.0"]
-
-# Data preparation and scraping
-dataprep = ["scrapfly-sdk==0.8.23", "python-dotenv==1.0.1", "backoff==2.2.0"]
-
-# Visualization and plotting
-visualization = ["matplotlib==3.10.3", "seaborn==0.13.2"]
-
-# Development tools
-development = ["ipython==9.2.0"]
-
-# Standard production deployment (most common features including SQL agent support)
-standard = ["ingenious[core,auth,ai,database]"]
 
 # Azure cloud deployment with full integration
-azure-full = ["ingenious[core,auth,azure,ai,database,ui]"]
+azure-full = [
+  "ingenious[core,auth,azure,ai,database,knowledge-base,ui]"
+]
 
-# Knowledge base and ML features
-knowledge-base = ["ingenious[core,ai,ml]"]
+# Knowledge base focused deployment
+knowledge-focused = [
+  "ingenious[core,ai,knowledge-base,ml]"
+]
 
-# Full feature set
+# Full feature set including document processing
 full = [
-  "ingenious[core,auth,azure,ai,database,ui,document-processing,ml,dataprep,visualization]",
+  "ingenious[core,auth,azure,ai,database,knowledge-base,ui,document-processing,ml,dataprep,visualization]"
 ]
 
 [build-system]

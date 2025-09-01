@@ -43,12 +43,27 @@ Set up ingenious locally first and then migrate to Azure services as shown in th
     # Set up the uv project
     uv init
 
-    # Choose installation based on features needed
-    uv add "ingenious[azure-full]" # Recommended: Full Azure integration (core, auth, azure, ai, database, ui)
-    # OR
-    uv add "ingenious[standard]" # for local testing: includes SQL agent support (core, auth, ai, database)
-    # OR for nightly builds
-    uv add --index-url https://test.pypi.org/simple/ "ingenious[azure-full]"
+    # Choose installation based on features needed:
+
+    # Basic API server only (33 packages)
+    uv add "ingenious"
+
+    # Standard production setup with auth + AI + database (86 packages)
+    uv add "ingenious[standard]"
+
+    # Full Azure cloud integration (recommended for production)
+    uv add "ingenious[azure-full]"
+
+    # Everything including document processing and ML
+    uv add "ingenious[full]"
+
+    # Or build your own combination:
+    # uv add "ingenious[core,auth,ai]"           # Basic AI workflows with auth
+    # uv add "ingenious[ai,knowledge-base]"      # AI + vector search only
+    # uv add "ingenious[azure,database]"         # Azure + database without AI
+
+    # For nightly builds, add --index-url prefix:
+    # uv add --index-url https://test.pypi.org/simple/ "ingenious[azure-full]"
 
     # Initialize project in the current directory
     uv run ingen init
@@ -115,7 +130,10 @@ Set up ingenious locally first and then migrate to Azure services as shown in th
     uv run ingen validate  # Check configuration before starting
     ```
 
-    **Expected validation output**: You should see confirmation that your configuration is valid and a count of available workflows (typically showing 4/4 workflows working: classification-agent, knowledge-base-agent, sql-manipulation-agent, and bike-insights after `ingen init`).
+    **Expected validation output**: You should see confirmation that your configuration is valid and a count of available workflows:
+    - **Minimal install**: 0/3 workflows (requires `[ai]` group for workflow functionality)
+    - **Standard install**: 3/4 workflows (classification-agent, sql-manipulation-agent working; knowledge-base-agent requires `[knowledge-base]` group)
+    - **Azure-full install**: 4/4 workflows working (classification-agent, knowledge-base-agent, sql-manipulation-agent, and bike-insights after `ingen init`)
 
     **If validation fails with port conflicts**:
     ```bash
