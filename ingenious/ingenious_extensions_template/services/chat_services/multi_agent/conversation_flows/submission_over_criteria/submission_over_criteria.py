@@ -22,13 +22,13 @@ from ingenious.models.chat import ChatRequest, ChatResponse
 from ingenious.models.message import Message as ChatHistoryMessage
 from ingenious.services.chat_services.multi_agent.service import IConversationFlow
 
-from ingenious_extensions_template.models.submission_over_criteria.ag_agents import (
+from ingenious.ingenious_extensions_template.models.submission_over_criteria.ag_agents import (
     RoutedAssistantAgent,
 )
 
 # Custom class import from ingenious_extensions
-from ingenious_extensions_template.models.submission_over_criteria.agent import ProjectAgents
-from ingenious_extensions_template.models.submission_over_criteria.submissions import (
+from ingenious.ingenious_extensions_template.models.submission_over_criteria.agent import ProjectAgents
+from ingenious.ingenious_extensions_template.models.submission_over_criteria.submissions import (
     SubmissionOverCriteriaRequest,
 )
 
