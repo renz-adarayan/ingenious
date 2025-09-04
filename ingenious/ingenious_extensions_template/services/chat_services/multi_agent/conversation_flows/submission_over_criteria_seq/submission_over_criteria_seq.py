@@ -153,9 +153,10 @@ class ConversationFlow(IConversationFlow):
         await register_research_agent(
             agent_name="scoring_agent",
             tools=[scoring_tool],
-            next_agent_topic="summary_agent",
+            next_agent_topic="summary",
         )
-        await register_research_agent(agent_name="summary_agent", next_agent_topic=None)
+        # Register the summarizer agent (named 'summary' in ProjectAgents)
+        await register_research_agent(agent_name="summary", next_agent_topic=None)
 
         # User proxy now waits for 2 analyzer outputs, then forwards to scoring_agent
         user_proxy = await RelayAgent.register(
@@ -187,7 +188,7 @@ class ConversationFlow(IConversationFlow):
 
         # Start the workflow by sending to criteria/submission agents only.
         # Their outputs are collated by user_proxy and sent to scoring_agent,
-        # then scoring_agent forwards to summary_agent.
+        # then scoring_agent forwards to summary.
         await asyncio.gather(
             runtime.publish_message(
                 criteria_message,
@@ -221,7 +222,7 @@ class ConversationFlow(IConversationFlow):
         # Get the summary response for storage (instead of ranking)
         summary_response = None
         for chat in llm_logger._queue:
-            if chat.chat_name == "summary_agent":
+            if chat.chat_name == "summary":
                 summary_response = chat
                 break
 
