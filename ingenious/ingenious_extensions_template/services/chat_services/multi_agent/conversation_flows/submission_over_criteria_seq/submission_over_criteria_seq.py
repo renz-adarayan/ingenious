@@ -22,7 +22,7 @@ from ingenious.models.chat import ChatRequest, ChatResponse
 from ingenious.models.message import Message as ChatHistoryMessage
 from ingenious.services.chat_services.multi_agent.service import IConversationFlow
 
-from ingenious.ingenious_extensions_template.models.submission_over_criteria.ag_agents import (
+from ingenious.ingenious_extensions_template.models.ag_agents import (
     RoutedAssistantAgent,
 )
 
