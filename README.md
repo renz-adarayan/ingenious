@@ -1,12 +1,12 @@
 # Insight Ingenious
 
-[![Version](https://img.shields.io/badge/version-0.2.5-blue.svg)](https://github.com/Insight-Services-APAC/ingenious)
+[![Version](https://img.shields.io/badge/version-0.2.6-blue.svg)](https://github.com/Insight-Services-APAC/ingenious)
 [![Python](https://img.shields.io/badge/python-3.13+-green.svg)](https://www.python.org/downloads/)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Insight-Services-APAC/ingenious)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
 
-Ingenious is a tool for quickly setting up APIs to interact with AI Agents. It features multi-agent conversation flows using Microsoft's AutoGen, JWT authentication, and supports both local development (SQLite, ChromaDB) and production Azure deployments (Azure SQL, Cosmos DB, Azure AI Search, Azure Blob, Container Apps).
+Ingenious is a tool for quickly setting up APIs to interact with AI Agents. It features multi-agent conversation flows using Microsoft's AutoGen, JWT authentication, and supports both local development (SQLite, ChromaDB) and production Azure deployments (Azure OpenAI, Azure SQL, Cosmos DB, Azure AI Search, Azure Blob, Container Apps).
 
 ## Quick Start
 
@@ -261,7 +261,7 @@ That's it! You should see a JSON response with AI analysis of the input.
     # Create bike-insights test data file
     # IMPORTANT: bike-insights requires JSON data in the user_prompt field (double-encoded JSON)
     printf '%s\n' '{
-      "user_prompt": "{\"revision_id\": \"test-v1\", \"identifier\": \"test-001\", \"stores\": [{\"name\": \"Test Store\", \"location\": \"NSW\", \"bike_sales\": [{\"product_code\": \"MB-TREK-2021-XC\", \"quantity_sold\": 2, \"sale_date\": \"2023-04-01\", \"year\": 2023, \"month\": \"April\", \"customer_review\": {\"rating\": 4.5, \"comment\": \"Great bike\"}}], \"bike_stock\": []}]}",
+      "user_prompt": "{\"revision_id\": \"quickstart-1\", \"identifier\": \"test-001\", \"stores\": [{\"name\": \"Test Store\", \"location\": \"NSW\", \"bike_sales\": [{\"product_code\": \"MB-TREK-2021-XC\", \"quantity_sold\": 2, \"sale_date\": \"2023-04-01\", \"year\": 2023, \"month\": \"April\", \"customer_review\": {\"rating\": 4.5, \"comment\": \"Great bike\"}}], \"bike_stock\": []}]}",
       "conversation_flow": "bike-insights"
     }' > test_bike_insights.json
 

@@ -13,20 +13,29 @@ This guide provides step-by-step instructions for moving from local development 
 ### 1. Create Resource Group
 
 ```bash
+# Check if resource group exists first
+az group show --name your-rg-name 2>/dev/null ||
 az group create --name your-rg-name --location eastus
 ```
 
 ### 2. Provision Azure SQL (Basic - 5 DTUs)
 
 ```bash
-# Create SQL Server
-SQL_PASSWORD=$(openssl rand -base64 32)
-az sql server create \
-  --name your-sql-server \
-  --resource-group your-rg-name \
-  --location westus2 \
-  --admin-user ingenious \
-  --admin-password "$SQL_PASSWORD"
+# Check if SQL Server exists first
+SQL_EXISTS=$(az sql server show --name your-sql-server --resource-group your-rg-name 2>/dev/null)
+if [ -z "$SQL_EXISTS" ]; then
+  # Create SQL Server only if it doesn't exist
+  SQL_PASSWORD=$(openssl rand -base64 32)
+  az sql server create \
+    --name your-sql-server \
+    --resource-group your-rg-name \
+    --location eastus2 \
+    --admin-user adminuser \
+    --admin-password "$SQL_PASSWORD"
+  echo "SQL Password: $SQL_PASSWORD"
+else
+  echo "SQL Server already exists, skipping creation"
+fi
 
 # Create Database (Basic SKU - cheapest option)
 az sql db create \
@@ -56,13 +65,19 @@ az sql server firewall-rule create \
 ### 3. Provision Azure Blob Storage
 
 ```bash
-# Create storage account (Standard_LRS - cheapest option)
-az storage account create \
-  --name yourblobstorage \
-  --resource-group your-rg-name \
-  --location westus2 \
-  --sku Standard_LRS \
-  --kind StorageV2
+# Check if storage account exists first
+STORAGE_EXISTS=$(az storage account show --name yourblobstorage --resource-group your-rg-name 2>/dev/null)
+if [ -z "$STORAGE_EXISTS" ]; then
+  # Create storage account (Standard_LRS - cheapest option)
+  az storage account create \
+    --name yourblobstorage \
+    --resource-group your-rg-name \
+    --location eastus2 \
+    --sku Standard_LRS \
+    --kind StorageV2
+else
+  echo "Storage account already exists, skipping creation"
+fi
 
 # Create prompts container
 az storage container create \
@@ -73,23 +88,55 @@ az storage container create \
 
 ## Environment Configuration
 
-### Update .env File
+### Transition from Local to Azure
 
-Add these environment variables to your `.env` file:
+When moving from local development to Azure, update your `.env` file with the following changes:
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `INGENIOUS_CHAT_HISTORY__DATABASE_TYPE` | Database type | `azuresql` |
-| `INGENIOUS_AZURE_SQL_SERVICES__DATABASE_CONNECTION_STRING` | SQL connection string | `Driver={ODBC Driver 18 for SQL Server};Server=tcp:your-sql-server.database.windows.net,1433;Database=ingenious-db;Uid=ingenious;Pwd=YOUR_PASSWORD;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;` |
-| `INGENIOUS_AZURE_SQL_SERVICES__DATABASE_NAME` | Database name | `ingenious-db` |
-| `INGENIOUS_AZURE_SQL_SERVICES__TABLE_NAME` | Chat history table | `chat_history` |
-| `INGENIOUS_CHAT_SERVICE__ENABLE_BUILTIN_WORKFLOWS` | **Production Security**: Disable built-in workflows | `false` |
-| `INGENIOUS_FILE_STORAGE__REVISIONS__ENABLE` | Enable file storage | `true` |
-| `INGENIOUS_FILE_STORAGE__REVISIONS__STORAGE_TYPE` | Storage type | `azure` |
-| `INGENIOUS_FILE_STORAGE__REVISIONS__CONTAINER_NAME` | Container name | `prompts` |
-| `INGENIOUS_FILE_STORAGE__REVISIONS__PATH` | Path prefix | `./` |
-| `INGENIOUS_FILE_STORAGE__REVISIONS__URL` | Storage account URL | `https://yourblobstorage.blob.core.windows.net` |
-| `INGENIOUS_FILE_STORAGE__REVISIONS__TOKEN` | Connection string | `DefaultEndpointsProtocol=https;AccountName=yourblobstorage;AccountKey=YOUR_KEY;EndpointSuffix=core.windows.net` |
+#### Local Development Configuration (Starting Point)
+```bash
+# Local SQLite database
+INGENIOUS_CHAT_HISTORY__DATABASE_TYPE=sqlite
+INGENIOUS_CHAT_HISTORY__DATABASE_PATH=./.tmp/chat_history.db
+
+# Local file storage
+INGENIOUS_FILE_STORAGE__REVISIONS__ENABLE=false
+```
+
+#### Azure Production Configuration (Target)
+```bash
+# Azure SQL Database
+INGENIOUS_CHAT_HISTORY__DATABASE_TYPE=azuresql
+INGENIOUS_AZURE_SQL_SERVICES__DATABASE_CONNECTION_STRING=Driver={ODBC Driver 18 for SQL Server};Server=tcp:your-sql-server.database.windows.net,1433;Database=ingenious-db;Uid=adminuser;Pwd=YOUR_PASSWORD;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;
+INGENIOUS_AZURE_SQL_SERVICES__DATABASE_NAME=ingenious-db
+INGENIOUS_AZURE_SQL_SERVICES__TABLE_NAME=chat_history
+
+# Azure Blob Storage for prompt templates
+INGENIOUS_FILE_STORAGE__REVISIONS__ENABLE=true
+INGENIOUS_FILE_STORAGE__REVISIONS__STORAGE_TYPE=azure
+INGENIOUS_FILE_STORAGE__REVISIONS__CONTAINER_NAME=prompts
+INGENIOUS_FILE_STORAGE__REVISIONS__PATH=./
+INGENIOUS_FILE_STORAGE__REVISIONS__URL=https://yourblobstorage.blob.core.windows.net
+INGENIOUS_FILE_STORAGE__REVISIONS__TOKEN=DefaultEndpointsProtocol=https;AccountName=yourblobstorage;AccountKey=YOUR_KEY;EndpointSuffix=core.windows.net
+
+# Production Security: Disable built-in workflows
+INGENIOUS_CHAT_SERVICE__ENABLE_BUILTIN_WORKFLOWS=false
+```
+
+### Complete Environment Variable Reference
+
+| Variable | Local Value | Azure Value | Description |
+|----------|-------------|-------------|-------------|
+| `INGENIOUS_CHAT_HISTORY__DATABASE_TYPE` | `sqlite` | `azuresql` | Database backend type |
+| `INGENIOUS_CHAT_HISTORY__DATABASE_PATH` | `./.tmp/chat_history.db` | (remove) | Local SQLite path |
+| `INGENIOUS_AZURE_SQL_SERVICES__DATABASE_CONNECTION_STRING` | (not needed) | `Driver={ODBC...}` | Azure SQL connection |
+| `INGENIOUS_AZURE_SQL_SERVICES__DATABASE_NAME` | (not needed) | `ingenious-db` | Azure SQL database name |
+| `INGENIOUS_AZURE_SQL_SERVICES__TABLE_NAME` | (not needed) | `chat_history` | Azure SQL table name |
+| `INGENIOUS_FILE_STORAGE__REVISIONS__ENABLE` | `false` | `true` | Enable cloud file storage |
+| `INGENIOUS_FILE_STORAGE__REVISIONS__STORAGE_TYPE` | `local` | `azure` | Storage backend type |
+| `INGENIOUS_FILE_STORAGE__REVISIONS__CONTAINER_NAME` | (not needed) | `prompts` | Blob container name |
+| `INGENIOUS_FILE_STORAGE__REVISIONS__URL` | (not needed) | `https://...` | Storage account URL |
+| `INGENIOUS_FILE_STORAGE__REVISIONS__TOKEN` | (not needed) | `DefaultEndpoints...` | Storage connection string |
+| `INGENIOUS_CHAT_SERVICE__ENABLE_BUILTIN_WORKFLOWS` | `true` | `false` | Production security setting |
 
 ### Get Azure Resource Information
 
@@ -120,13 +167,13 @@ az sql server show \
 Upload your prompt templates to the correct blob path:
 
 ```bash
-# Upload templates for revision "test-v1"
+# Upload templates for revision "quickstart-1"
 for file in templates/prompts/quickstart-1/*.jinja; do
   filename=$(basename "$file")
   az storage blob upload \
     --account-name yourblobstorage \
     --container-name prompts \
-    --name "templates/prompts/test-v1/$filename" \
+    --name "templates/prompts/quickstart-1/$filename" \
     --file "$file" \
     --auth-mode key \
     --overwrite
@@ -205,7 +252,7 @@ Expected response:
 ```bash
 # Test bike-insights workflow (requires prompt templates uploaded)
 echo '{
-  "user_prompt": "{\"revision_id\": \"test-v1\", \"identifier\": \"test-001\", \"stores\": [{\"name\": \"Test Store\", \"location\": \"NSW\", \"bike_sales\": [{\"product_code\": \"MB-TREK-2021-XC\", \"quantity_sold\": 2, \"sale_date\": \"2023-04-01\", \"year\": 2023, \"month\": \"April\", \"customer_review\": {\"rating\": 4.5, \"comment\": \"Great bike\"}}], \"bike_stock\": []}]}",
+  "user_prompt": "{\"revision_id\": \"quickstart-1\", \"identifier\": \"test-001\", \"stores\": [{\"name\": \"Test Store\", \"location\": \"NSW\", \"bike_sales\": [{\"product_code\": \"MB-TREK-2021-XC\", \"quantity_sold\": 2, \"sale_date\": \"2023-04-01\", \"year\": 2023, \"month\": \"April\", \"customer_review\": {\"rating\": 4.5, \"comment\": \"Great bike\"}}], \"bike_stock\": []}]}",
   "conversation_flow": "bike-insights"
 }' > test_azure.json
 
