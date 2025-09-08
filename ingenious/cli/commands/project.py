@@ -160,20 +160,31 @@ class InitCommand(BaseCommand):
 # Core AI Model Configuration (REQUIRED)
 # API key for your OpenAI or Azure OpenAI service
 INGENIOUS_MODELS__0__API_KEY=your-api-key-here
-# Base URL for Azure OpenAI (e.g., https://your-resource.openai.azure.com/)
-INGENIOUS_MODELS__0__BASE_URL=https://your-resource.openai.azure.com/
+# Base URL for Azure OpenAI (use Cognitive Services endpoint format)
+INGENIOUS_MODELS__0__BASE_URL=https://eastus.api.cognitive.microsoft.com/
 # Model name (e.g., gpt-4o-mini, gpt-4, gpt-3.5-turbo)
 INGENIOUS_MODELS__0__MODEL=gpt-4o-mini
 # Azure OpenAI API version
-INGENIOUS_MODELS__0__API_VERSION=2024-02-01
+INGENIOUS_MODELS__0__API_VERSION=2024-12-01-preview
 # Azure OpenAI deployment name (usually same as model)
 INGENIOUS_MODELS__0__DEPLOYMENT=gpt-4o-mini
 # API type for Azure OpenAI
 INGENIOUS_MODELS__0__API_TYPE=rest
+# Role for this model (chat for generation, embedding for vector operations)
+INGENIOUS_MODELS__0__ROLE=chat
+
+# Model 1: Embedding model (REQUIRED for Azure AI Search)
+INGENIOUS_MODELS__1__API_KEY=your-api-key-here
+INGENIOUS_MODELS__1__BASE_URL=https://eastus.api.cognitive.microsoft.com/
+INGENIOUS_MODELS__1__MODEL=text-embedding-3-small
+INGENIOUS_MODELS__1__API_VERSION=2024-12-01-preview
+INGENIOUS_MODELS__1__DEPLOYMENT=text-embedding-3-small-deployment
+INGENIOUS_MODELS__1__API_TYPE=rest
+INGENIOUS_MODELS__1__ROLE=embedding
 
 # Web Server Configuration (OPTIONAL)
-# Port for the web server (default: 80)
-INGENIOUS_WEB_CONFIGURATION__PORT=80
+# Port for the web server (use 8000 to avoid conflicts)
+INGENIOUS_WEB_CONFIGURATION__PORT=8000
 # IP address to bind (default: 0.0.0.0)
 INGENIOUS_WEB_CONFIGURATION__IP_ADDRESS=0.0.0.0
 # Enable authentication (default: false)
@@ -202,12 +213,18 @@ INGENIOUS_LOGGING__LOG_LEVEL=info
 # INGENIOUS_AZURE_SQL_SERVICES__DATABASE_NAME=your_database_name
 # INGENIOUS_AZURE_SQL_SERVICES__TABLE_NAME=chat_history
 
-# Optional: Azure Search (for knowledge-base workflows)
+# Knowledge base configuration - local ChromaDB for development
+KB_POLICY=local_only
+KB_TOPK_DIRECT=3
+KB_TOPK_ASSIST=5
+KB_MODE=direct
+
+# Optional: Azure Search (for knowledge-base workflows in production)
 # INGENIOUS_AZURE_SEARCH_SERVICES__0__KEY=your-search-api-key
 # INGENIOUS_AZURE_SEARCH_SERVICES__0__ENDPOINT=https://your-search-service.search.windows.net
 
-# Optional: Local SQL Database path for sql-manipulation workflows
-# INGENIOUS_LOCAL_SQL_DB__DATABASE_PATH=/tmp/sample_sql.db
+# Local SQL database configuration - local SQLite for development
+INGENIOUS_LOCAL_SQL_DB__DATABASE_PATH=./.tmp/sample_sql.db
 
 # Optional: Scrapfly API for dataprep commands
 # SCRAPFLY_API_KEY=your-scrapfly-api-key
