@@ -142,7 +142,8 @@ class ConversationFlow(IConversationFlow):
                 TypeSubscription(topic_type=agent_name, agent_type=reg_agent.type)
             )
 
-        # Register evaluation agents in proper sequence
+        # Register evaluation agents in the new sequence:
+        # criteria/submission -> user_proxy -> scoring -> summary
         await register_research_agent(
             agent_name="criteria_analyzer_agent", next_agent_topic="user_proxy"
         )
@@ -152,19 +153,20 @@ class ConversationFlow(IConversationFlow):
         await register_research_agent(
             agent_name="scoring_agent",
             tools=[scoring_tool],
-            next_agent_topic="user_proxy",
+            next_agent_topic="summary",
         )
-        await register_research_agent(agent_name="ranking_agent", next_agent_topic=None)
+        # Register the summarizer agent (named 'summary' in ProjectAgents)
+        await register_research_agent(agent_name="summary", next_agent_topic=None)
 
-        # User proxy to coordinate the workflow
+        # User proxy now waits for 2 analyzer outputs, then forwards to scoring_agent
         user_proxy = await RelayAgent.register(
             runtime,
             "user_proxy",
             lambda: RelayAgent(
                 agents.get_agent_by_name("user_proxy"),
                 data_identifier=identifier,
-                next_agent_topic="ranking_agent",  # Pass to ranking agent
-                number_of_messages_before_next_agent=3,  # Wait for 3 analyzer outputs
+                next_agent_topic="scoring_agent",  # Collated outputs go to scoring
+                number_of_messages_before_next_agent=2,  # Wait for criteria + submission
             ),
         )
         await runtime.add_subscription(
@@ -172,14 +174,10 @@ class ConversationFlow(IConversationFlow):
         )
 
         # Skip chat history injection for submission evaluations to ensure independence
-        # Each evaluation should be performed without contamination from previous results
 
         runtime.start()
 
         # Prepare messages for different agents
-        initial_message: AgentMessage = AgentMessage(content=json.dumps(message))
-        initial_message.content = "```json\\n" + initial_message.content + "\\n```"
-
         criteria_message: AgentMessage = AgentMessage(
             content=submission_request.display_criteria_as_table()
         )
@@ -188,8 +186,9 @@ class ConversationFlow(IConversationFlow):
             content=submission_request.display_submissions_as_table()
         )
 
-        # Start the evaluation workflow by sending messages to initial agents
-        # Ranking agent will receive data from scoring agent automatically
+        # Start the workflow by sending to criteria/submission agents only.
+        # Their outputs are collated by user_proxy and sent to scoring_agent,
+        # then scoring_agent forwards to summary.
         await asyncio.gather(
             runtime.publish_message(
                 criteria_message,
@@ -198,10 +197,6 @@ class ConversationFlow(IConversationFlow):
             runtime.publish_message(
                 submissions_message,
                 topic_id=TopicId(type="submission_evaluator_agent", source="default"),
-            ),
-            runtime.publish_message(
-                initial_message,
-                topic_id=TopicId(type="scoring_agent", source="default"),
             ),
         )
 
@@ -224,20 +219,20 @@ class ConversationFlow(IConversationFlow):
             memory_summary="",
         )
 
-        # Get the ranking response for storage (instead of summary)
-        ranking_response = None
+        # Get the summary response for storage (instead of ranking)
+        summary_response = None
         for chat in llm_logger._queue:
-            if chat.chat_name == "ranking_agent":
-                ranking_response = chat
+            if chat.chat_name == "summary":
+                summary_response = chat
                 break
 
-        if ranking_response:
+        if summary_response:
             message: ChatHistoryMessage = ChatHistoryMessage(
                 user_id=chat_request.user_id,
                 thread_id=chat_request.thread_id,
                 message_id=identifier,
                 role="output",
-                content=ranking_response.chat_response.chat_message.content,
+                content=summary_response.chat_response.chat_message.content,
                 content_filter_results=None,
                 tool_calls=None,
                 tool_call_id=None,
@@ -248,7 +243,7 @@ class ConversationFlow(IConversationFlow):
                 message=message
             )
         else:
-            # If no ranking found, create a default message
+            # If no summary found, create a default message
             message: ChatHistoryMessage = ChatHistoryMessage(
                 user_id=chat_request.user_id,
                 thread_id=chat_request.thread_id,
