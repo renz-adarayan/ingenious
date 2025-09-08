@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Context
 
-This is the **ingenious** package - a core AI agent framework library (v0.2.5) that's part of a monorepo. The sister project `mrwa-defect-chat` (in `../mrwa-defect-chat/`) demonstrates production usage with Azure integrations.
+This is the **ingenious** package - a core AI agent framework library (v0.2.6).
 
 ## Package Management
 
@@ -101,17 +101,27 @@ KB_POLICY=azure uv run ingen serve --port 8000
 Environment variables with `INGENIOUS_` prefix (using pydantic-settings):
 
 ```bash
-# Required Azure OpenAI - use Cognitive Services endpoint format
+# Required Azure OpenAI - use Cognitive Services endpoint format (CRITICAL)
 INGENIOUS_MODELS__0__API_KEY=your-key
 INGENIOUS_MODELS__0__BASE_URL=https://eastus.api.cognitive.microsoft.com/
 INGENIOUS_MODELS__0__MODEL=gpt-4o-mini
 INGENIOUS_MODELS__0__API_VERSION=2024-12-01-preview
-INGENIOUS_MODELS__0__DEPLOYMENT=your-deployment
+INGENIOUS_MODELS__0__DEPLOYMENT=gpt-4o-mini-deployment
 INGENIOUS_MODELS__0__API_TYPE=rest
+INGENIOUS_MODELS__0__ROLE=chat
+
+# Model 1: Embedding model (REQUIRED for Azure AI Search)
+INGENIOUS_MODELS__1__API_KEY=your-key
+INGENIOUS_MODELS__1__BASE_URL=https://eastus.api.cognitive.microsoft.com/
+INGENIOUS_MODELS__1__MODEL=text-embedding-3-small
+INGENIOUS_MODELS__1__API_VERSION=2024-12-01-preview
+INGENIOUS_MODELS__1__DEPLOYMENT=text-embedding-3-small-deployment
+INGENIOUS_MODELS__1__API_TYPE=rest
+INGENIOUS_MODELS__1__ROLE=embedding
 
 # Chat service
 INGENIOUS_CHAT_SERVICE__TYPE=multi_agent
-INGENIOUS_CHAT_HISTORY__DATABASE_TYPE=sqlite  # or azuresql
+INGENIOUS_CHAT_HISTORY__DATABASE_TYPE=sqlite  # or azuresql or cosmos
 INGENIOUS_CHAT_HISTORY__DATABASE_PATH=./.tmp/chat_history.db
 
 # Web server (use port 8000 to avoid conflicts)
@@ -123,8 +133,8 @@ INGENIOUS_WEB_CONFIGURATION__AUTHENTICATION__ENABLE=true
 INGENIOUS_WEB_CONFIGURATION__AUTHENTICATION__USERNAME=admin
 INGENIOUS_WEB_CONFIGURATION__AUTHENTICATION__PASSWORD=secure_password
 
-# Knowledge base configuration
-KB_POLICY=local_only  # or azure for Azure AI Search
+# Knowledge base configuration (CRITICAL for knowledge-base-agent)
+KB_POLICY=local_only  # or azure_only, prefer_azure, prefer_local
 KB_TOPK_DIRECT=3
 KB_TOPK_ASSIST=5
 KB_MODE=direct
@@ -133,7 +143,11 @@ KB_MODE=direct
 INGENIOUS_LOCAL_SQL_DB__DATABASE_PATH=./.tmp/sample_sql.db
 ```
 
-**Important**: Use Cognitive Services endpoint format (`https://eastus.api.cognitive.microsoft.com/`) not OpenAI format (`https://your-resource.openai.azure.com/`) for Azure OpenAI.
+**CRITICAL Configuration Notes**:
+- **Azure OpenAI Endpoint**: Must use Cognitive Services format (`https://eastus.api.cognitive.microsoft.com/`) not deprecated OpenAI format (`https://your-resource.openai.azure.com/`)
+- **Dual Model Setup**: Azure AI Search requires TWO separate models with different ROLE values (chat + embedding)
+- **KB_POLICY**: Essential for knowledge-base-agent functionality. Use `KB_POLICY=local_only` for development
+- **Port Conflicts**: Always use port 8000 to avoid conflicts with system port 80
 
 Legacy YAML migration: `uv run python scripts/migrate_config.py --yaml-file config.yml --output .env`
 
@@ -145,7 +159,15 @@ Legacy YAML migration: `uv run python scripts/migrate_config.py --yaml-file conf
 2. Implement `IConversationFlow` interface with `get_conversation_response` method
 3. Define agents inline or import from `ingenious/models/ag_agents/`
 4. Create Jinja2 prompt templates in `templates/prompts/`
-5. Flow is auto-discovered by name match with `conversation_flow` parameter
+5. **CRITICAL**: Set `export PYTHONPATH=$(pwd):$PYTHONPATH` before server startup for workflow discovery
+6. Restart server after adding new workflows for discovery
+7. Flow is auto-discovered by name match with `conversation_flow` parameter
+
+### Important Workflow Development Notes
+- **Revision ID**: Use `"revision_id": "quickstart-1"` in examples (not `"test-v1"`) to match actual template structure
+- **Template Location**: Templates created by `ingen init` are stored under `quickstart-1/` directory
+- **Authentication**: Both Basic Auth and JWT work seamlessly with custom workflows
+- **Error Handling**: Always implement proper exception handling in conversation flows
 
 ### Project Template
 
@@ -213,14 +235,62 @@ Strict mypy configuration with:
 - Relaxed rules for tests and certain legacy modules (multi_agent, auth, files, etc.)
 - Run `uv run mypy .` before submitting changes
 
-### Common Validation Workflow
+### Complete Quality Assurance Workflow
 ```bash
-# Full validation sequence before commits
-uv run mypy .                      # Type checking
-uv run pre-commit run --all-files  # Linting and formatting
-uv run pytest -m "not slow"       # Fast tests only
-uv run ingen validate              # Configuration validation
+# CRITICAL: Run this sequence before any commits or PRs
+uv run ingen validate              # Configuration validation (must pass first)
+uv run pytest -m "not slow"       # Fast tests only (919 tests should pass)
+uv run pre-commit run --all-files  # Linting and formatting (all hooks must pass)
+uv run mypy . --exclude test_dir   # Type checking (324 files, no issues)
+
+# For comprehensive validation:
+uv run pytest --cov=ingenious     # Full test suite with coverage
 ```
+
+### Authentication Testing Patterns
+```bash
+# Test without authentication (should get 401 for protected endpoints)
+curl -X POST http://localhost:8000/api/v1/chat -H "Content-Type: application/json" -d @test.json
+
+# Test with Basic Auth
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Basic $(echo -n 'username:password' | base64)" \
+  -d @test.json
+
+# Test with JWT (get token first)
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "secure_password"}' | \
+  python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
+
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d @test.json
+```
+
+### Prompt Template Management
+
+Templates are managed via API endpoints:
+```bash
+# List templates for a revision
+curl -X GET "http://localhost:8000/api/v1/prompts/list/quickstart-1" -H "Authorization: Bearer $TOKEN"
+
+# View specific template
+curl -X GET "http://localhost:8000/api/v1/prompts/view/quickstart-1/summary_prompt.jinja" -H "Authorization: Bearer $TOKEN"
+
+# Update/create template
+curl -X POST "http://localhost:8000/api/v1/prompts/update/quickstart-1/my_template.jinja" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Your Jinja2 template content here"}'
+```
+
+**Storage Location**:
+- **Local**: `templates/prompts/quickstart-1/`
+- **Azure Blob**: `templates/prompts/quickstart-1/` (same structure)
+- Templates are loaded dynamically based on `revision_id` in requests
 
 ## Package Features
 
