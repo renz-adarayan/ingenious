@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBasicCredentials
@@ -10,6 +10,7 @@ import ingenious.dependencies as igen_deps
 from ingenious.core.structured_logging import get_logger
 from ingenious.files.files_repository import FileStorage
 from ingenious.utils.namespace_utils import discover_workflows, normalize_workflow_name
+from ingenious.utils.revision_names import generate_revision_id
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -17,6 +18,10 @@ router = APIRouter()
 
 class UpdatePromptRequest(BaseModel):
     content: str
+
+
+class CreateRevisionRequest(BaseModel):
+    revision_id: Optional[str] = None
 
 
 @router.get("/revisions/list")
@@ -288,3 +293,164 @@ async def update(
             exc_info=True,
         )
         raise HTTPException(status_code=500, detail="Failed to update file")
+
+
+@router.post("/revisions/create")
+async def create_revision(
+    request: Request,
+    create_request: CreateRevisionRequest,
+    credentials: Annotated[
+        HTTPBasicCredentials, Depends(igen_deps.get_conditional_security)
+    ],
+    fs: FileStorage = Depends(igen_deps.get_file_storage_revisions),
+) -> Dict[str, Any]:
+    """
+    Create a new revision with templates copied from original-templates.
+    
+    If no revision_id is provided, generates a funny name like 'cosmic-ninja-a1b2c3d4'.
+    If revision_id is provided but conflicts, appends incremental numbers like 'my-workflow-1'.
+    """
+    try:
+        # Get list of existing revisions for conflict resolution
+        base_template_path = await fs.get_prompt_template_path()
+        revisions_raw = await fs.list_files(file_path=base_template_path)
+        
+        # Extract existing revision IDs
+        existing_revision_ids = set()
+        items_list = revisions_raw.split("\n") if revisions_raw else []
+        for item in items_list:
+            if not item:
+                continue
+            # Extract revision ID from path for both local and Azure blob
+            if "/" in item:
+                path_parts = item.split("/")
+                if len(path_parts) >= 4:  # templates/prompts/revision_id/filename
+                    existing_revision_ids.add(path_parts[2])
+        
+        # Generate the final revision ID
+        final_revision_id = generate_revision_id(
+            create_request.revision_id, 
+            list(existing_revision_ids)
+        )
+        
+        # Get source templates from original-templates
+        source_path = await fs.get_prompt_template_path("original-templates")
+        try:
+            source_files_raw = await fs.list_files(file_path=source_path)
+        except Exception as e:
+            logger.error(
+                "Failed to access original-templates directory",
+                source_path=source_path,
+                error=str(e),
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="Original template directory not found or inaccessible"
+            )
+        
+        # Parse source files
+        source_files = []
+        if source_files_raw:
+            file_list = source_files_raw.split("\n")
+            for f in file_list:
+                if f and f.endswith((".md", ".jinja")):
+                    # Extract filename for Azure blob paths
+                    filename = f.split("/")[-1] if "/" in f else f
+                    source_files.append(filename)
+        
+        if not source_files:
+            logger.error(
+                "No template files found in original-templates",
+                source_path=source_path,
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="No template files found in original-templates directory"
+            )
+        
+        # Get destination path for new revision
+        dest_path = await fs.get_prompt_template_path(final_revision_id)
+        
+        # Copy each template file
+        copied_files = []
+        failed_files = []
+        
+        for filename in source_files:
+            try:
+                # Read from source
+                content = await fs.read_file(
+                    file_name=filename,
+                    file_path=source_path
+                )
+                
+                # Write to destination
+                await fs.write_file(
+                    contents=content,
+                    file_name=filename,
+                    file_path=dest_path,
+                )
+                
+                copied_files.append(filename)
+                logger.info(
+                    "Copied template file",
+                    filename=filename,
+                    source_path=source_path,
+                    dest_path=dest_path,
+                )
+                
+            except Exception as e:
+                logger.error(
+                    "Failed to copy template file",
+                    filename=filename,
+                    source_path=source_path,
+                    dest_path=dest_path,
+                    error=str(e),
+                    exc_info=True,
+                )
+                failed_files.append(filename)
+        
+        # Check if any files were successfully copied
+        if not copied_files:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to copy any template files"
+            )
+        
+        logger.info(
+            "Successfully created revision",
+            revision_id=final_revision_id,
+            original_request_id=create_request.revision_id,
+            copied_files_count=len(copied_files),
+            failed_files_count=len(failed_files),
+        )
+        
+        response_data = {
+            "revision_id": final_revision_id,
+            "message": "Revision created successfully",
+            "template_count": len(copied_files),
+            "copied_files": copied_files,
+        }
+        
+        # Include failed files info if any
+        if failed_files:
+            response_data["partial_success"] = True
+            response_data["failed_files"] = failed_files
+            response_data["warning"] = f"Failed to copy {len(failed_files)} template files"
+        
+        return response_data
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions (these are intentional)
+        raise
+    except Exception as e:
+        logger.error(
+            "Unexpected error creating revision",
+            requested_id=create_request.revision_id,
+            error=str(e),
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error while creating revision"
+        )
