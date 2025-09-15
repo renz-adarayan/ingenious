@@ -1,4 +1,3 @@
-import asyncio
 from typing import Any, Dict, Optional, Set
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -27,7 +26,6 @@ class CreateRevisionRequest(BaseModel):
 async def _get_existing_revision_ids(fs: FileStorage) -> Set[str]:
     """
     Helper function to get existing revision IDs from the templates directory.
-    Uses the same robust logic as the /revisions/list endpoint.
     """
     try:
         # Get the base templates/prompts path
@@ -51,7 +49,7 @@ async def _get_existing_revision_ids(fs: FileStorage) -> Set[str]:
                 if len(path_parts) >= 4:  # templates/prompts/revision_id/filename
                     revision_ids.add(path_parts[2])
             else:
-            # For local, items are filenames directly
+                # For local, items are filenames directly
                 revision_ids.add(item)
 
         # If no revisions found via path parsing, try to discover from workflows
@@ -77,7 +75,7 @@ async def _get_existing_revision_ids(fs: FileStorage) -> Set[str]:
 
 
 @router.get("/revisions/list")
-def list_revisions(
+async def list_revisions(
     request: Request,
     credentials: Annotated[
         HTTPBasicCredentials, Depends(igen_deps.get_conditional_security)
@@ -88,7 +86,7 @@ def list_revisions(
     List all available revisions (workflow directories) in the prompt templates.
     """
     try:
-        revision_ids = asyncio.run(_get_existing_revision_ids(fs))
+        revision_ids = await _get_existing_revision_ids(fs)
 
         return {
             "revisions": sorted(list(revision_ids)),
@@ -101,7 +99,7 @@ def list_revisions(
 
 
 @router.get("/workflows/list")
-def list_workflows_for_prompts(
+async def list_workflows_for_prompts(
     request: Request,
     credentials: Annotated[
         HTTPBasicCredentials, Depends(igen_deps.get_conditional_security)
@@ -130,8 +128,8 @@ def list_workflows_for_prompts(
             for variant in workflow_variants:
                 try:
                     # Check if this workflow has prompts
-                    workflow_path = asyncio.run(fs.get_prompt_template_path(variant))
-                    workflow_files = asyncio.run(fs.list_files(file_path=workflow_path))
+                    workflow_path = await fs.get_prompt_template_path(variant)
+                    workflow_files = await fs.list_files(file_path=workflow_path)
                     if workflow_files:
                         prompt_files = [
                             f for f in workflow_files if f.endswith((".md", ".jinja"))
@@ -178,7 +176,7 @@ def list_workflows_for_prompts(
 
 
 @router.get("/prompts/list/{revision_id}")
-def list_prompts_enhanced(
+async def list_prompts_enhanced(
     revision_id: str,
     request: Request,
     credentials: Annotated[
@@ -203,10 +201,10 @@ def list_prompts_enhanced(
 
         for rid in revision_ids_to_try:
             try:
-                prompt_template_folder = asyncio.run(
-                    fs.get_prompt_template_path(revision_id=rid)
+                prompt_template_folder = await fs.get_prompt_template_path(
+                    revision_id=rid
                 )
-                files_raw = asyncio.run(fs.list_files(file_path=prompt_template_folder))
+                files_raw = await fs.list_files(file_path=prompt_template_folder)
 
                 # Filter to get only template files
                 potential_files = []
@@ -263,7 +261,7 @@ def list_prompts_enhanced(
 
 
 @router.get("/prompts/view/{revision_id}/{filename}")
-def view(
+async def view(
     revision_id: str,
     filename: str,
     request: Request,
@@ -272,12 +270,8 @@ def view(
     ],
     fs: FileStorage = Depends(igen_deps.get_file_storage_revisions),
 ) -> str:
-    prompt_template_folder = asyncio.run(
-        fs.get_prompt_template_path(revision_id=revision_id)
-    )
-    content = asyncio.run(
-        fs.read_file(file_name=filename, file_path=prompt_template_folder)
-    )
+    prompt_template_folder = await fs.get_prompt_template_path(revision_id=revision_id)
+    content = await fs.read_file(file_name=filename, file_path=prompt_template_folder)
     return content
 
 
@@ -322,20 +316,19 @@ async def create_revision(
 ) -> Dict[str, Any]:
     """
     Create a new revision with templates copied from original-templates.
-    
+
     If no revision_id is provided, generates a funny name like 'cosmic-ninja-a1b2c3d4'.
     If revision_id is provided but conflicts, appends incremental numbers like 'my-workflow-1'.
     """
     try:
-        # Get list of existing revisions for conflict resolution using the same logic as /revisions/list
+        # Get list of existing revisions for conflict resolution
         existing_revision_ids = await _get_existing_revision_ids(fs)
-        
+
         # Generate the final revision ID
         final_revision_id = generate_revision_id(
-            create_request.revision_id, 
-            list(existing_revision_ids)
+            create_request.revision_id, list(existing_revision_ids)
         )
-        
+
         # Get source templates from original-templates
         source_path = await fs.get_prompt_template_path("original-templates")
         try:
@@ -349,9 +342,9 @@ async def create_revision(
             )
             raise HTTPException(
                 status_code=500,
-                detail="Original template directory not found or inaccessible"
+                detail="Original template directory not found or inaccessible",
             )
-        
+
         # Parse source files - handle both newline-separated and Python list string formats
         source_files = []
         if source_files_raw:
@@ -360,6 +353,7 @@ async def create_revision(
                 # Python list string format: "['file1.jinja', 'file2.jinja']"
                 try:
                     import ast
+
                     file_list = ast.literal_eval(source_files_raw)
                 except (ValueError, SyntaxError):
                     # Fallback to treating as single item
@@ -367,13 +361,13 @@ async def create_revision(
             else:
                 # Newline-separated format
                 file_list = source_files_raw.split("\n")
-            
+
             for f in file_list:
                 if f and f.endswith((".md", ".jinja")):
                     # Extract filename for Azure blob paths
                     filename = f.split("/")[-1] if "/" in f else f
                     source_files.append(filename)
-        
+
         if not source_files:
             logger.error(
                 "No template files found in original-templates",
@@ -381,31 +375,28 @@ async def create_revision(
             )
             raise HTTPException(
                 status_code=500,
-                detail="No template files found in original-templates directory"
+                detail="No template files found in original-templates directory",
             )
-        
+
         # Get destination path for new revision
         dest_path = await fs.get_prompt_template_path(final_revision_id)
-        
+
         # Copy each template file
         copied_files = []
         failed_files = []
-        
+
         for filename in source_files:
             try:
                 # Read from source
-                content = await fs.read_file(
-                    file_name=filename,
-                    file_path=source_path
-                )
-                
+                content = await fs.read_file(file_name=filename, file_path=source_path)
+
                 # Write to destination
                 await fs.write_file(
                     contents=content,
                     file_name=filename,
                     file_path=dest_path,
                 )
-                
+
                 copied_files.append(filename)
                 logger.info(
                     "Copied template file",
@@ -413,7 +404,7 @@ async def create_revision(
                     source_path=source_path,
                     dest_path=dest_path,
                 )
-                
+
             except Exception as e:
                 logger.error(
                     "Failed to copy template file",
@@ -424,14 +415,13 @@ async def create_revision(
                     exc_info=True,
                 )
                 failed_files.append(filename)
-        
+
         # Check if any files were successfully copied
         if not copied_files:
             raise HTTPException(
-                status_code=500,
-                detail="Failed to copy any template files"
+                status_code=500, detail="Failed to copy any template files"
             )
-        
+
         logger.info(
             "Successfully created revision",
             revision_id=final_revision_id,
@@ -439,22 +429,24 @@ async def create_revision(
             copied_files_count=len(copied_files),
             failed_files_count=len(failed_files),
         )
-        
+
         response_data = {
             "revision_id": final_revision_id,
             "message": "Revision created successfully",
             "template_count": len(copied_files),
             "copied_files": copied_files,
         }
-        
+
         # Include failed files info if any
         if failed_files:
             response_data["partial_success"] = True
             response_data["failed_files"] = failed_files
-            response_data["warning"] = f"Failed to copy {len(failed_files)} template files"
-        
+            response_data["warning"] = (
+                f"Failed to copy {len(failed_files)} template files"
+            )
+
         return response_data
-        
+
     except HTTPException:
         # Re-raise HTTP exceptions (these are intentional)
         raise
@@ -466,6 +458,5 @@ async def create_revision(
             exc_info=True,
         )
         raise HTTPException(
-            status_code=500,
-            detail="Internal server error while creating revision"
+            status_code=500, detail="Internal server error while creating revision"
         )
