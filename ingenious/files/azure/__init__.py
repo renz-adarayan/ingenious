@@ -187,6 +187,54 @@ class azure_FileStorageRepository(IFileStorage):
             )
             raise
 
+    async def list_directories(self, file_path: str) -> str:
+        """
+        List directories (blob prefixes) in an Azure Blob container based on a path.
+
+        :param file_path: Path within the storage container to list directories from.
+        """
+        try:
+            path = Path(self.fs_config.path) / Path(file_path)
+            prefix = str(path).replace(
+                "\\", "/"
+            )  # Ensure the path is in the correct format for Azure
+            
+            # Add trailing slash if not present to ensure we're looking for subdirectories
+            if prefix and not prefix.endswith("/"):
+                prefix += "/"
+            
+            # List blobs in the container with the specified prefix
+            container_client = self.blob_service_client.get_container_client(
+                self.container_name
+            )
+            
+            # Get all blob names with the prefix
+            blob_names = [
+                blob.name
+                for blob in container_client.list_blobs(name_starts_with=prefix)
+            ]
+            
+            # Extract unique directory names from blob paths
+            directories = set()
+            for blob_name in blob_names:
+                # Remove the prefix to get relative path
+                relative_path = blob_name[len(prefix):] if prefix else blob_name
+                
+                # Find the first directory separator to get immediate subdirectory
+                if "/" in relative_path:
+                    dir_name = relative_path.split("/")[0]
+                    if dir_name:  # Ensure it's not empty
+                        directories.add(dir_name)
+            
+            # Return newline-separated format for consistency with local implementation
+            return "\n".join(sorted(directories)) if directories else ""
+            
+        except Exception as e:
+            logger.error(
+                f"Failed to list directories in container {self.container_name} with prefix {prefix}: {e}"
+            )
+            raise
+
     async def check_if_file_exists(self, file_path: str, file_name: str) -> bool:
         """
         Check if a blob exists in an Azure Blob container.

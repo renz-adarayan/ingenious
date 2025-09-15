@@ -35,6 +35,11 @@ class IFileStorage(ABC):
         pass
 
     @abstractmethod
+    async def list_directories(self, file_path: str) -> str:
+        """lists directories in the file storage"""
+        pass
+
+    @abstractmethod
     async def check_if_file_exists(self, file_path: str, file_name: str) -> bool:
         """checks if a file exists in the file storage"""
         pass
@@ -92,6 +97,9 @@ class FileStorage:
 
     async def list_files(self, file_path: str) -> str:
         return await self.repository.list_files(file_path)
+
+    async def list_directories(self, file_path: str) -> str:
+        return await self.repository.list_directories(file_path)
 
     async def check_if_file_exists(self, file_path: str, file_name: str) -> bool:
         return await self.repository.check_if_file_exists(file_path, file_name)
