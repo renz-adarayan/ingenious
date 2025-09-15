@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBasicCredentials
@@ -24,6 +24,58 @@ class CreateRevisionRequest(BaseModel):
     revision_id: Optional[str] = None
 
 
+async def _get_existing_revision_ids(fs: FileStorage) -> Set[str]:
+    """
+    Helper function to get existing revision IDs from the templates directory.
+    Uses the same robust logic as the /revisions/list endpoint.
+    """
+    try:
+        # Get the base templates/prompts path
+        base_template_path = await fs.get_prompt_template_path()
+
+        # List all directories in the templates/prompts folder
+        revisions_raw = await fs.list_directories(file_path=base_template_path)
+
+        # Filter to find directories (these would be the revision IDs)
+        # For Azure Blob Storage, we need to look for folder prefixes
+        revision_ids = set()
+        # Handle string response from list_files (newline-separated)
+        items_list = revisions_raw.split("\n") if revisions_raw else []
+        for item in items_list:
+            if not item:
+                continue
+            # Extract revision ID from the path
+            # For Azure, items are full paths like "templates/prompts/submission-over-criteria-v1/file.jinja"
+            if "/" in item:
+                path_parts = item.split("/")
+                if len(path_parts) >= 4:  # templates/prompts/revision_id/filename
+                    revision_ids.add(path_parts[2])
+            else:
+            # For local, items are filenames directly
+                revision_ids.add(item)
+
+        # If no revisions found via path parsing, try to discover from workflows
+        if not revision_ids:
+            config = igen_deps.get_config()
+            workflows = discover_workflows(
+                include_builtin=config.chat_service.enable_builtin_workflows
+            )
+            for workflow in workflows:
+                # Check if this workflow has prompts
+                workflow_path = await fs.get_prompt_template_path(workflow)
+                try:
+                    workflow_files = await fs.list_files(file_path=workflow_path)
+                    if workflow_files:
+                        revision_ids.add(workflow)
+                except Exception:
+                    pass
+
+        return revision_ids
+    except Exception as e:
+        logger.error("Error getting existing revision IDs", error=str(e), exc_info=True)
+        return set()
+
+
 @router.get("/revisions/list")
 def list_revisions(
     request: Request,
@@ -36,43 +88,7 @@ def list_revisions(
     List all available revisions (workflow directories) in the prompt templates.
     """
     try:
-        # Get the base templates/prompts path
-        base_template_path = asyncio.run(fs.get_prompt_template_path())
-
-        # List all directories in the templates/prompts folder
-        revisions_raw = asyncio.run(fs.list_files(file_path=base_template_path))
-
-        # Filter to find directories (these would be the revision IDs)
-        # For Azure Blob Storage, we need to look for folder prefixes
-        revision_ids = set()
-        # Handle string response from list_files (newline-separated)
-        items_list = revisions_raw.split("\n") if revisions_raw else []
-        for item in items_list:
-            if not item:
-                continue
-            # Extract revision ID from the path
-            # For Azure, items are full paths like "templates/prompts/submission-over-criteria-v1/file.jinja"
-            # For local, items are filenames directly
-            if "/" in item:
-                path_parts = item.split("/")
-                if len(path_parts) >= 4:  # templates/prompts/revision_id/filename
-                    revision_ids.add(path_parts[2])
-
-        # If no revisions found via path parsing, try to discover from workflows
-        if not revision_ids:
-            config = igen_deps.get_config()
-            workflows = discover_workflows(
-                include_builtin=config.chat_service.enable_builtin_workflows
-            )
-            for workflow in workflows:
-                # Check if this workflow has prompts
-                workflow_path = asyncio.run(fs.get_prompt_template_path(workflow))
-                try:
-                    workflow_files = asyncio.run(fs.list_files(file_path=workflow_path))
-                    if workflow_files:
-                        revision_ids.add(workflow)
-                except Exception:
-                    pass
+        revision_ids = asyncio.run(_get_existing_revision_ids(fs))
 
         return {
             "revisions": sorted(list(revision_ids)),
@@ -311,36 +327,8 @@ async def create_revision(
     If revision_id is provided but conflicts, appends incremental numbers like 'my-workflow-1'.
     """
     try:
-        # Get list of existing revisions for conflict resolution
-        base_template_path = await fs.get_prompt_template_path()
-        revisions_raw = await fs.list_files(file_path=base_template_path)
-        
-        # Extract existing revision IDs
-        existing_revision_ids = set()
-        
-        # Parse file listing - handle both newline-separated and Python list string formats
-        items_list = []
-        if revisions_raw:
-            if revisions_raw.startswith("[") and revisions_raw.endswith("]"):
-                # Python list string format: "['file1', 'file2']"
-                try:
-                    import ast
-                    items_list = ast.literal_eval(revisions_raw)
-                except (ValueError, SyntaxError):
-                    # Fallback to treating as single item
-                    items_list = [revisions_raw.strip("[]'\"")]
-            else:
-                # Newline-separated format
-                items_list = revisions_raw.split("\n")
-        
-        for item in items_list:
-            if not item:
-                continue
-            # Extract revision ID from path for both local and Azure blob
-            if "/" in item:
-                path_parts = item.split("/")
-                if len(path_parts) >= 4:  # templates/prompts/revision_id/filename
-                    existing_revision_ids.add(path_parts[2])
+        # Get list of existing revisions for conflict resolution using the same logic as /revisions/list
+        existing_revision_ids = await _get_existing_revision_ids(fs)
         
         # Generate the final revision ID
         final_revision_id = generate_revision_id(
