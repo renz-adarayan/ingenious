@@ -389,21 +389,12 @@ async def create_revision(
                 )
 
                 copied_files.append(filename)
-                logger.info(
-                    "Copied template file",
-                    filename=filename,
-                    source_path=source_path,
-                    dest_path=dest_path,
-                )
 
             except Exception as e:
-                logger.error(
+                logger.debug(
                     "Failed to copy template file",
                     filename=filename,
-                    source_path=source_path,
-                    dest_path=dest_path,
                     error=str(e),
-                    exc_info=True,
                 )
                 failed_files.append(filename)
 
@@ -416,9 +407,7 @@ async def create_revision(
         logger.info(
             "Successfully created revision",
             revision_id=final_revision_id,
-            original_request_id=create_request.revision_id,
             copied_files_count=len(copied_files),
-            failed_files_count=len(failed_files),
         )
 
         response_data = {
