@@ -34,23 +34,14 @@ async def _get_existing_revision_ids(fs: FileStorage) -> Set[str]:
         # List all directories in the templates/prompts folder
         revisions_raw = await fs.list_directories(file_path=base_template_path)
 
-        # Filter to find directories (these would be the revision IDs)
-        # For Azure Blob Storage, we need to look for folder prefixes
+        # Since list_directories now returns directory names directly,
+        # we can add them directly to the set
         revision_ids = set()
-        # Handle string response from list_files (newline-separated)
-        items_list = revisions_raw.split("\n") if revisions_raw else []
-        for item in items_list:
-            if not item:
-                continue
-            # Extract revision ID from the path
-            # For Azure, items are full paths like "templates/prompts/submission-over-criteria-v1/file.jinja"
-            if "/" in item:
-                path_parts = item.split("/")
-                if len(path_parts) >= 4:  # templates/prompts/revision_id/filename
-                    revision_ids.add(path_parts[2])
-            else:
-                # For local, items are filenames directly
-                revision_ids.add(item)
+        if revisions_raw:
+            # Split by newlines and add non-empty items directly
+            for item in revisions_raw.split("\n"):
+                if item.strip():  # Use strip() to handle any whitespace
+                    revision_ids.add(item.strip())
 
         # If no revisions found via path parsing, try to discover from workflows
         if not revision_ids:
