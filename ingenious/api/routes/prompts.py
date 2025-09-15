@@ -317,7 +317,22 @@ async def create_revision(
         
         # Extract existing revision IDs
         existing_revision_ids = set()
-        items_list = revisions_raw.split("\n") if revisions_raw else []
+        
+        # Parse file listing - handle both newline-separated and Python list string formats
+        items_list = []
+        if revisions_raw:
+            if revisions_raw.startswith("[") and revisions_raw.endswith("]"):
+                # Python list string format: "['file1', 'file2']"
+                try:
+                    import ast
+                    items_list = ast.literal_eval(revisions_raw)
+                except (ValueError, SyntaxError):
+                    # Fallback to treating as single item
+                    items_list = [revisions_raw.strip("[]'\"")]
+            else:
+                # Newline-separated format
+                items_list = revisions_raw.split("\n")
+        
         for item in items_list:
             if not item:
                 continue
@@ -349,10 +364,22 @@ async def create_revision(
                 detail="Original template directory not found or inaccessible"
             )
         
-        # Parse source files
+        # Parse source files - handle both newline-separated and Python list string formats
         source_files = []
         if source_files_raw:
-            file_list = source_files_raw.split("\n")
+            file_list = []
+            if source_files_raw.startswith("[") and source_files_raw.endswith("]"):
+                # Python list string format: "['file1.jinja', 'file2.jinja']"
+                try:
+                    import ast
+                    file_list = ast.literal_eval(source_files_raw)
+                except (ValueError, SyntaxError):
+                    # Fallback to treating as single item
+                    file_list = [source_files_raw.strip("[]'\"")]
+            else:
+                # Newline-separated format
+                file_list = source_files_raw.split("\n")
+            
             for f in file_list:
                 if f and f.endswith((".md", ".jinja")):
                     # Extract filename for Azure blob paths
