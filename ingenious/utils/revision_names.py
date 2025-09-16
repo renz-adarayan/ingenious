@@ -130,11 +130,14 @@ def resolve_user_revision_id(revision_id: str, existing_revision_ids: list[str])
     if not revision_id:
         raise ValueError("Revision ID cannot be empty")
 
+    # Convert to set for O(1) membership checks
+    existing_ids_set = set(existing_revision_ids)
+
     # Normalize the revision ID (lowercase, replace underscores with hyphens)
     normalized_id = normalize_revision_id(revision_id)
 
-    # If the ID doesn't conflict, use it as-is
-    if normalized_id not in existing_revision_ids:
+    # If the ID doesn't conflict, use it as-is (O(1) lookup)
+    if normalized_id not in existing_ids_set:
         logger.info(
             "User revision ID available",
             original_revision_id=revision_id,
