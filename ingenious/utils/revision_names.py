@@ -135,27 +135,19 @@ def resolve_user_revision_id(revision_id: str, existing_revision_ids: list[str])
         )
         return normalized_id
 
-    # Find the highest numbered version that exists
-    pattern = re.compile(rf"^{re.escape(normalized_id)}-(\d+)$")
-    highest_number = 0
+    # Use while loop with O(1) set membership checks to find next available number
+    candidate_number = 1
+    while f"{normalized_id}-{candidate_number}" in existing_ids_set:
+        candidate_number += 1
 
-    for existing_id in existing_revision_ids:
-        match = pattern.match(existing_id)
-        if match:
-            number = int(match.group(1))
-            highest_number = max(highest_number, number)
-
-    # Generate the next available number
-    next_number = highest_number + 1
-    resolved_id = f"{normalized_id}-{next_number}"
+    resolved_id = f"{normalized_id}-{candidate_number}"
 
     logger.debug(
         "Resolved user revision ID conflict",
         original_revision_id=revision_id,
         normalized_id=normalized_id,
         resolved_id=resolved_id,
-        highest_existing_number=highest_number,
-        next_number=next_number,
+        candidate_number=candidate_number,
     )
 
     return resolved_id
