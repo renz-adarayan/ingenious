@@ -5,7 +5,7 @@ from fastapi.security import HTTPBasicCredentials
 from pydantic import BaseModel
 from typing_extensions import Annotated
 
-import ingenious.dependencies as igen_deps
+import ingenious.dependencies as ingen_deps
 from ingenious.core.structured_logging import get_logger
 from ingenious.files.files_repository import FileStorage
 from ingenious.utils.namespace_utils import discover_workflows, normalize_workflow_name
@@ -45,7 +45,7 @@ async def _get_existing_revision_ids(fs: FileStorage) -> Set[str]:
 
         # If no revisions found via path parsing, try to discover from workflows
         if not revision_ids:
-            config = igen_deps.get_config()
+            config = ingen_deps.get_config()
             workflows = discover_workflows(
                 include_builtin=config.chat_service.enable_builtin_workflows
             )
@@ -69,9 +69,9 @@ async def _get_existing_revision_ids(fs: FileStorage) -> Set[str]:
 async def list_revisions(
     request: Request,
     credentials: Annotated[
-        HTTPBasicCredentials, Depends(igen_deps.get_conditional_security)
+        HTTPBasicCredentials, Depends(ingen_deps.get_conditional_security)
     ],
-    fs: FileStorage = Depends(igen_deps.get_file_storage_revisions),
+    fs: FileStorage = Depends(ingen_deps.get_file_storage_revisions),
 ) -> Dict[str, Any]:
     """
     List all available revisions (workflow directories) in the prompt templates.
@@ -93,15 +93,15 @@ async def list_revisions(
 async def list_workflows_for_prompts(
     request: Request,
     credentials: Annotated[
-        HTTPBasicCredentials, Depends(igen_deps.get_conditional_security)
+        HTTPBasicCredentials, Depends(ingen_deps.get_conditional_security)
     ],
-    fs: FileStorage = Depends(igen_deps.get_file_storage_revisions),
+    fs: FileStorage = Depends(ingen_deps.get_file_storage_revisions),
 ) -> Dict[str, Any]:
     """
     List all available workflows that have prompt templates.
     """
     try:
-        config = igen_deps.get_config()
+        config = ingen_deps.get_config()
         workflows = discover_workflows(
             include_builtin=config.chat_service.enable_builtin_workflows
         )
@@ -171,9 +171,9 @@ async def list_prompts_enhanced(
     revision_id: str,
     request: Request,
     credentials: Annotated[
-        HTTPBasicCredentials, Depends(igen_deps.get_conditional_security)
+        HTTPBasicCredentials, Depends(ingen_deps.get_conditional_security)
     ],
-    fs: FileStorage = Depends(igen_deps.get_file_storage_revisions),
+    fs: FileStorage = Depends(ingen_deps.get_file_storage_revisions),
 ) -> Dict[str, Any]:
     """
     Enhanced prompt listing with better metadata and error handling.
@@ -257,9 +257,9 @@ async def view(
     filename: str,
     request: Request,
     credentials: Annotated[
-        HTTPBasicCredentials, Depends(igen_deps.get_conditional_security)
+        HTTPBasicCredentials, Depends(ingen_deps.get_conditional_security)
     ],
-    fs: FileStorage = Depends(igen_deps.get_file_storage_revisions),
+    fs: FileStorage = Depends(ingen_deps.get_file_storage_revisions),
 ) -> str:
     prompt_template_folder = await fs.get_prompt_template_path(revision_id=revision_id)
     content = await fs.read_file(file_name=filename, file_path=prompt_template_folder)
@@ -273,9 +273,9 @@ async def update(
     request: Request,
     update_request: UpdatePromptRequest,
     credentials: Annotated[
-        HTTPBasicCredentials, Depends(igen_deps.get_conditional_security)
+        HTTPBasicCredentials, Depends(ingen_deps.get_conditional_security)
     ],
-    fs: FileStorage = Depends(igen_deps.get_file_storage_revisions),
+    fs: FileStorage = Depends(ingen_deps.get_file_storage_revisions),
 ) -> Dict[str, str]:
     prompt_template_folder = await fs.get_prompt_template_path(revision_id=revision_id)
     try:
@@ -301,9 +301,9 @@ async def create_revision(
     request: Request,
     create_request: CreateRevisionRequest,
     credentials: Annotated[
-        HTTPBasicCredentials, Depends(igen_deps.get_conditional_security)
+        HTTPBasicCredentials, Depends(ingen_deps.get_conditional_security)
     ],
-    fs: FileStorage = Depends(igen_deps.get_file_storage_revisions),
+    fs: FileStorage = Depends(ingen_deps.get_file_storage_revisions),
 ) -> Dict[str, Any]:
     """
     Create a new revision with templates copied from original-templates.

@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException, Request
 from typing_extensions import Annotated
 
-import ingenious.dependencies as igen_deps
+import ingenious.dependencies as ingen_deps
 from ingenious.core.structured_logging import get_logger
 from ingenious.models.http_error import HTTPError
 from ingenious.utils.namespace_utils import (
@@ -30,7 +30,7 @@ router = APIRouter()
 async def workflow_status(
     workflow_name: str,
     request: Request,
-    auth_user: Annotated[str, Depends(igen_deps.get_auth_user)],
+    auth_user: Annotated[str, Depends(ingen_deps.get_auth_user)],
 ) -> Dict[str, Any]:
     """
     Check the configuration status of a specific workflow.
@@ -39,7 +39,7 @@ async def workflow_status(
     and what external services or configuration might be missing.
     """
     try:
-        config = igen_deps.get_config()
+        config = ingen_deps.get_config()
 
         # Normalize workflow name to handle both hyphenated and underscored formats
         normalized_workflow_name = normalize_workflow_name(workflow_name)
@@ -162,7 +162,7 @@ async def workflow_status(
 )
 async def list_workflows(
     request: Request,
-    auth_user: Annotated[str, Depends(igen_deps.get_auth_user)],
+    auth_user: Annotated[str, Depends(ingen_deps.get_auth_user)],
 ) -> Dict[str, Any]:
     """
     List all available workflows and their configuration status.
@@ -170,7 +170,7 @@ async def list_workflows(
     Dynamically discovers workflows from all namespaces.
     """
     try:
-        config = igen_deps.get_config()
+        config = ingen_deps.get_config()
 
         # Dynamically discover all available workflows
         discovered_workflows = discover_workflows(
@@ -230,7 +230,7 @@ async def list_workflows(
 )
 async def diagnostic(
     request: Request,
-    auth_user: Annotated[str, Depends(igen_deps.get_auth_user)],
+    auth_user: Annotated[str, Depends(ingen_deps.get_auth_user)],
 ) -> Dict[str, Any]:
     if request.method == "OPTIONS":
         return {"Allow": "GET, OPTIONS"}
@@ -239,22 +239,22 @@ async def diagnostic(
         diagnostic = {}
 
         prompt_dir = Path(
-            await igen_deps.get_file_storage_revisions().get_base_path()
+            await ingen_deps.get_file_storage_revisions().get_base_path()
         ) / Path(
-            await igen_deps.get_file_storage_revisions().get_prompt_template_path()
+            await ingen_deps.get_file_storage_revisions().get_prompt_template_path()
         )
 
-        data_dir = Path(await igen_deps.get_file_storage_data().get_base_path()) / Path(
-            await igen_deps.get_file_storage_data().get_data_path()
+        data_dir = Path(await ingen_deps.get_file_storage_data().get_base_path()) / Path(
+            await ingen_deps.get_file_storage_data().get_data_path()
         )
 
         output_dir = Path(
-            await igen_deps.get_file_storage_revisions().get_base_path()
-        ) / Path(await igen_deps.get_file_storage_revisions().get_output_path())
+            await ingen_deps.get_file_storage_revisions().get_base_path()
+        ) / Path(await ingen_deps.get_file_storage_revisions().get_output_path())
 
         events_dir = Path(
-            await igen_deps.get_file_storage_revisions().get_base_path()
-        ) / Path(await igen_deps.get_file_storage_revisions().get_events_path())
+            await ingen_deps.get_file_storage_revisions().get_base_path()
+        ) / Path(await ingen_deps.get_file_storage_revisions().get_events_path())
 
         diagnostic["Prompt Directory"] = prompt_dir
         diagnostic["Data Directory"] = data_dir
@@ -287,7 +287,7 @@ async def health_check() -> Dict[str, Any]:
 
         # Check basic configuration availability
         try:
-            _ = igen_deps.get_config()
+            _ = ingen_deps.get_config()
             config_status = "ok"
         except Exception as e:
             logger.warning("Configuration check failed", error=str(e))
