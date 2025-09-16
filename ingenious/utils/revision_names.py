@@ -18,13 +18,9 @@ logger = get_logger(__name__)
 
 # Constants for validation
 MAX_REVISION_ID_LENGTH: Final[int] = 50
-MIN_REVISION_ID_LENGTH: Final[int] = 1
 UUID_SUFFIX_LENGTH: Final[int] = 8
 
 # Pre-compiled regex patterns for performance
-_REVISION_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
-)
 _MULTIPLE_HYPHENS_PATTERN: Final[re.Pattern[str]] = re.compile(r"-+")
 _INVALID_CHARS_PATTERN: Final[re.Pattern[str]] = re.compile(r"[^a-z0-9-]")
 
@@ -181,6 +177,7 @@ def normalize_revision_id(name: str) -> str:
     - Replace underscores with hyphens
     - Remove any invalid characters (keep only alphanumeric, hyphens)
     - Ensure it doesn't start or end with a hyphen
+    - Validate maximum length constraint
 
     Args:
         name: The revision ID to normalize
@@ -189,7 +186,8 @@ def normalize_revision_id(name: str) -> str:
         str: The normalized revision ID
 
     Raises:
-        ValueError: If the name is empty or becomes empty after normalization
+        ValueError: If the name is empty, becomes empty after normalization,
+                   or exceeds maximum length
     """
     if not name or not name.strip():
         raise ValueError("Revision ID cannot be empty")
@@ -206,6 +204,12 @@ def normalize_revision_id(name: str) -> str:
     if not normalized:
         raise ValueError(f"Revision ID '{name}' contains no valid characters")
 
+    # Validate maximum length constraint
+    if len(normalized) > MAX_REVISION_ID_LENGTH:
+        raise ValueError(
+            f"Revision ID '{normalized}' exceeds maximum length of {MAX_REVISION_ID_LENGTH} characters (got {len(normalized)})"
+        )
+
     logger.debug(
         "Normalized revision ID",
         original_name=name,
@@ -213,36 +217,6 @@ def normalize_revision_id(name: str) -> str:
     )
 
     return normalized
-
-
-def validate_revision_id(revision_id: str) -> bool:
-    """
-    Validate that a revision ID follows the expected format.
-
-    Args:
-        revision_id: The revision ID to validate
-
-    Returns:
-        bool: True if the ID is valid, False otherwise
-    """
-    if not revision_id:
-        return False
-
-    # Must contain only lowercase letters, numbers, and hyphens
-    # Must not start or end with a hyphen
-    # Must be between MIN_REVISION_ID_LENGTH and MAX_REVISION_ID_LENGTH characters
-    is_valid = (
-        MIN_REVISION_ID_LENGTH <= len(revision_id) <= MAX_REVISION_ID_LENGTH
-        and _REVISION_ID_PATTERN.match(revision_id) is not None
-    )
-
-    logger.debug(
-        "Validated revision ID",
-        revision_id=revision_id,
-        is_valid=is_valid,
-    )
-
-    return is_valid
 
 
 def generate_revision_id(
