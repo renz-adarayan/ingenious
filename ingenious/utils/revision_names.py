@@ -96,17 +96,7 @@ def generate_funny_revision_id() -> str:
     # Use first 'UUID_SUFFIX_LENGTH' characters of UUID for brevity
     short_uuid = str(uuid.uuid4()).replace("-", "")[:UUID_SUFFIX_LENGTH]
 
-    funny_id = f"{adjective}-{noun}-{short_uuid}"
-
-    logger.info(
-        "Generated funny revision ID",
-        revision_id=funny_id,
-        adjective=adjective,
-        noun=noun,
-        uuid_suffix=short_uuid,
-    )
-
-    return funny_id
+    return f"{adjective}-{noun}-{short_uuid}"
 
 
 def resolve_user_revision_id(revision_id: str, existing_revision_ids: list[str]) -> str:
@@ -138,7 +128,7 @@ def resolve_user_revision_id(revision_id: str, existing_revision_ids: list[str])
 
     # If the ID doesn't conflict, use it as-is (O(1) lookup)
     if normalized_id not in existing_ids_set:
-        logger.info(
+        logger.debug(
             "User revision ID available",
             original_revision_id=revision_id,
             resolved_id=normalized_id,
@@ -159,7 +149,7 @@ def resolve_user_revision_id(revision_id: str, existing_revision_ids: list[str])
     next_number = highest_number + 1
     resolved_id = f"{normalized_id}-{next_number}"
 
-    logger.info(
+    logger.debug(
         "Resolved user revision ID conflict",
         original_revision_id=revision_id,
         normalized_id=normalized_id,
