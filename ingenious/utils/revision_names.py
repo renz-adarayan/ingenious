@@ -16,6 +16,8 @@ from ingenious.core.structured_logging import get_logger
 
 logger = get_logger(__name__)
 
+
+# TODO: Make a cleaner approach for these word lists (e.g. external file / loader)
 # GitHub Codespaces-style word lists
 ADJECTIVES = [
     "animated",
