@@ -9,7 +9,7 @@ import ingenious.dependencies as ingen_deps
 from ingenious.core.structured_logging import get_logger
 from ingenious.files.files_repository import FileStorage
 from ingenious.utils.namespace_utils import discover_workflows, normalize_workflow_name
-from ingenious.utils.revision_names import generate_revision_id
+from ingenious.utils.revision_names import generate_revision_id, normalize_revision_id
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -312,7 +312,22 @@ async def create_revision(
     If revision_id is provided but conflicts, appends incremental numbers like 'my-workflow-1'.
     """
     try:
-        # Get list of existing revisions for conflict resolution
+        # Early validation of revision_id format if provided
+        if create_request.revision_id:
+            try:
+                # Validate format without conflict checking yet
+                normalize_revision_id(create_request.revision_id)
+            except ValueError as e:
+                logger.warning(
+                    "Invalid revision_id format provided",
+                    revision_id=create_request.revision_id,
+                    error=str(e),
+                )
+                raise HTTPException(
+                    status_code=400, detail=f"Invalid revision_id format: {str(e)}"
+                )
+
+        # Only proceed with file operations after basic validation passes
         existing_revision_ids = await _get_existing_revision_ids(fs)
 
         # Generate the final revision ID
