@@ -1,7 +1,7 @@
 import importlib
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Union
+from typing import List, Union
 
 from ingenious.config.main_settings import IngeniousSettings
 from ingenious.models.config import Config, FileStorageContainer
@@ -32,6 +32,11 @@ class IFileStorage(ABC):
     @abstractmethod
     async def list_files(self, file_path: str) -> str:
         """lists files in the file storage"""
+        pass
+
+    @abstractmethod
+    async def list_directories(self, file_path: str) -> List[str]:
+        """lists directories in the file storage"""
         pass
 
     @abstractmethod
@@ -92,6 +97,9 @@ class FileStorage:
 
     async def list_files(self, file_path: str) -> str:
         return await self.repository.list_files(file_path)
+
+    async def list_directories(self, file_path: str) -> List[str]:
+        return await self.repository.list_directories(file_path)
 
     async def check_if_file_exists(self, file_path: str, file_name: str) -> bool:
         return await self.repository.check_if_file_exists(file_path, file_name)

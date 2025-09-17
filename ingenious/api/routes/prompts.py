@@ -1,15 +1,15 @@
-import asyncio
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBasicCredentials
 from pydantic import BaseModel
 from typing_extensions import Annotated
 
-import ingenious.dependencies as igen_deps
+import ingenious.dependencies as ingen_deps
 from ingenious.core.structured_logging import get_logger
 from ingenious.files.files_repository import FileStorage
 from ingenious.utils.namespace_utils import discover_workflows, normalize_workflow_name
+from ingenious.utils.revision_names import generate_revision_id, normalize_revision_id
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -19,55 +19,61 @@ class UpdatePromptRequest(BaseModel):
     content: str
 
 
-@router.get("/revisions/list")
-def list_revisions(
-    request: Request,
-    credentials: Annotated[
-        HTTPBasicCredentials, Depends(igen_deps.get_conditional_security)
-    ],
-    fs: FileStorage = Depends(igen_deps.get_file_storage_revisions),
-) -> Dict[str, Any]:
+class CreateRevisionRequest(BaseModel):
+    revision_id: Optional[str] = None
+
+
+async def _get_existing_revision_ids(fs: FileStorage) -> Set[str]:
     """
-    List all available revisions (workflow directories) in the prompt templates.
+    Helper function to get existing revision IDs from the templates directory.
     """
     try:
         # Get the base templates/prompts path
-        base_template_path = asyncio.run(fs.get_prompt_template_path())
+        base_template_path = await fs.get_prompt_template_path()
 
         # List all directories in the templates/prompts folder
-        revisions_raw = asyncio.run(fs.list_files(file_path=base_template_path))
+        revision_dirs: List[str] = await fs.list_directories(
+            file_path=base_template_path
+        )
 
-        # Filter to find directories (these would be the revision IDs)
-        # For Azure Blob Storage, we need to look for folder prefixes
-        revision_ids = set()
-        # Handle string response from list_files (newline-separated)
-        items_list = revisions_raw.split("\n") if revisions_raw else []
-        for item in items_list:
-            if not item:
-                continue
-            # Extract revision ID from the path
-            # For Azure, items are full paths like "templates/prompts/submission-over-criteria-v1/file.jinja"
-            # For local, items are filenames directly
-            if "/" in item:
-                path_parts = item.split("/")
-                if len(path_parts) >= 4:  # templates/prompts/revision_id/filename
-                    revision_ids.add(path_parts[2])
+        # Convert list to set
+        revision_ids = set(revision_dirs) if revision_dirs else set()
 
-        # If no revisions found via path parsing, try to discover from workflows
+        # If no revisions found via directory listing, try to discover from workflows
         if not revision_ids:
-            config = igen_deps.get_config()
+            config = ingen_deps.get_config()
             workflows = discover_workflows(
                 include_builtin=config.chat_service.enable_builtin_workflows
             )
             for workflow in workflows:
                 # Check if this workflow has prompts
-                workflow_path = asyncio.run(fs.get_prompt_template_path(workflow))
+                workflow_path = await fs.get_prompt_template_path(workflow)
                 try:
-                    workflow_files = asyncio.run(fs.list_files(file_path=workflow_path))
+                    workflow_files = await fs.list_files(file_path=workflow_path)
                     if workflow_files:
                         revision_ids.add(workflow)
                 except Exception:
                     pass
+
+        return revision_ids
+    except Exception as e:
+        logger.error("Error getting existing revision IDs", error=str(e), exc_info=True)
+        return set()
+
+
+@router.get("/revisions/list")
+async def list_revisions(
+    request: Request,
+    credentials: Annotated[
+        HTTPBasicCredentials, Depends(ingen_deps.get_conditional_security)
+    ],
+    fs: FileStorage = Depends(ingen_deps.get_file_storage_revisions),
+) -> Dict[str, Any]:
+    """
+    List all available revisions (workflow directories) in the prompt templates.
+    """
+    try:
+        revision_ids = await _get_existing_revision_ids(fs)
 
         return {
             "revisions": sorted(list(revision_ids)),
@@ -80,18 +86,18 @@ def list_revisions(
 
 
 @router.get("/workflows/list")
-def list_workflows_for_prompts(
+async def list_workflows_for_prompts(
     request: Request,
     credentials: Annotated[
-        HTTPBasicCredentials, Depends(igen_deps.get_conditional_security)
+        HTTPBasicCredentials, Depends(ingen_deps.get_conditional_security)
     ],
-    fs: FileStorage = Depends(igen_deps.get_file_storage_revisions),
+    fs: FileStorage = Depends(ingen_deps.get_file_storage_revisions),
 ) -> Dict[str, Any]:
     """
     List all available workflows that have prompt templates.
     """
     try:
-        config = igen_deps.get_config()
+        config = ingen_deps.get_config()
         workflows = discover_workflows(
             include_builtin=config.chat_service.enable_builtin_workflows
         )
@@ -109,8 +115,8 @@ def list_workflows_for_prompts(
             for variant in workflow_variants:
                 try:
                     # Check if this workflow has prompts
-                    workflow_path = asyncio.run(fs.get_prompt_template_path(variant))
-                    workflow_files = asyncio.run(fs.list_files(file_path=workflow_path))
+                    workflow_path = await fs.get_prompt_template_path(variant)
+                    workflow_files = await fs.list_files(file_path=workflow_path)
                     if workflow_files:
                         prompt_files = [
                             f for f in workflow_files if f.endswith((".md", ".jinja"))
@@ -157,13 +163,13 @@ def list_workflows_for_prompts(
 
 
 @router.get("/prompts/list/{revision_id}")
-def list_prompts_enhanced(
+async def list_prompts_enhanced(
     revision_id: str,
     request: Request,
     credentials: Annotated[
-        HTTPBasicCredentials, Depends(igen_deps.get_conditional_security)
+        HTTPBasicCredentials, Depends(ingen_deps.get_conditional_security)
     ],
-    fs: FileStorage = Depends(igen_deps.get_file_storage_revisions),
+    fs: FileStorage = Depends(ingen_deps.get_file_storage_revisions),
 ) -> Dict[str, Any]:
     """
     Enhanced prompt listing with better metadata and error handling.
@@ -182,10 +188,10 @@ def list_prompts_enhanced(
 
         for rid in revision_ids_to_try:
             try:
-                prompt_template_folder = asyncio.run(
-                    fs.get_prompt_template_path(revision_id=rid)
+                prompt_template_folder = await fs.get_prompt_template_path(
+                    revision_id=rid
                 )
-                files_raw = asyncio.run(fs.list_files(file_path=prompt_template_folder))
+                files_raw = await fs.list_files(file_path=prompt_template_folder)
 
                 # Filter to get only template files
                 potential_files = []
@@ -242,21 +248,17 @@ def list_prompts_enhanced(
 
 
 @router.get("/prompts/view/{revision_id}/{filename}")
-def view(
+async def view(
     revision_id: str,
     filename: str,
     request: Request,
     credentials: Annotated[
-        HTTPBasicCredentials, Depends(igen_deps.get_conditional_security)
+        HTTPBasicCredentials, Depends(ingen_deps.get_conditional_security)
     ],
-    fs: FileStorage = Depends(igen_deps.get_file_storage_revisions),
+    fs: FileStorage = Depends(ingen_deps.get_file_storage_revisions),
 ) -> str:
-    prompt_template_folder = asyncio.run(
-        fs.get_prompt_template_path(revision_id=revision_id)
-    )
-    content = asyncio.run(
-        fs.read_file(file_name=filename, file_path=prompt_template_folder)
-    )
+    prompt_template_folder = await fs.get_prompt_template_path(revision_id=revision_id)
+    content = await fs.read_file(file_name=filename, file_path=prompt_template_folder)
     return content
 
 
@@ -267,9 +269,9 @@ async def update(
     request: Request,
     update_request: UpdatePromptRequest,
     credentials: Annotated[
-        HTTPBasicCredentials, Depends(igen_deps.get_conditional_security)
+        HTTPBasicCredentials, Depends(ingen_deps.get_conditional_security)
     ],
-    fs: FileStorage = Depends(igen_deps.get_file_storage_revisions),
+    fs: FileStorage = Depends(ingen_deps.get_file_storage_revisions),
 ) -> Dict[str, str]:
     prompt_template_folder = await fs.get_prompt_template_path(revision_id=revision_id)
     try:
@@ -288,3 +290,168 @@ async def update(
             exc_info=True,
         )
         raise HTTPException(status_code=500, detail="Failed to update file")
+
+
+@router.post("/revisions/create")
+async def create_revision(
+    request: Request,
+    create_request: CreateRevisionRequest,
+    credentials: Annotated[
+        HTTPBasicCredentials, Depends(ingen_deps.get_conditional_security)
+    ],
+    fs: FileStorage = Depends(ingen_deps.get_file_storage_revisions),
+) -> Dict[str, Any]:
+    """
+    Create a new revision with templates copied from the configured original templates.
+
+    If no revision_id is provided, generates a funny name like 'cosmic-ninja-a1b2c3d4'.
+    If revision_id is provided but conflicts, appends incremental numbers like 'my-workflow-1'.
+    """
+    try:
+        # Early validation of revision_id format if provided
+        if create_request.revision_id:
+            try:
+                # Validate format without conflict checking yet
+                normalize_revision_id(create_request.revision_id)
+            except ValueError as e:
+                logger.warning(
+                    "Invalid revision_id format provided",
+                    revision_id=create_request.revision_id,
+                    error=str(e),
+                )
+                raise HTTPException(
+                    status_code=400, detail=f"Invalid revision_id format: {str(e)}"
+                )
+
+        # Only proceed with file operations after basic validation passes
+        existing_revision_ids = await _get_existing_revision_ids(fs)
+
+        # Generate the final revision ID
+        final_revision_id = generate_revision_id(
+            create_request.revision_id, list(existing_revision_ids)
+        )
+
+        # Get source templates from configured original templates revision
+        config = ingen_deps.get_config()
+        original_templates_revision = config.file_storage.revisions.original_templates
+        source_path = await fs.get_prompt_template_path(original_templates_revision)
+        try:
+            source_files_raw = await fs.list_files(file_path=source_path)
+        except Exception as e:
+            logger.error(
+                "Failed to access original templates directory",
+                source_path=source_path,
+                original_templates_revision=original_templates_revision,
+                error=str(e),
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="Original template directory not found or inaccessible",
+            )
+
+        # Parse source files - handle both newline-separated and Python list string formats
+        source_files = []
+        if source_files_raw:
+            file_list = []
+            if source_files_raw.startswith("[") and source_files_raw.endswith("]"):
+                # Python list string format: "['file1.jinja', 'file2.jinja']"
+                try:
+                    import ast
+
+                    file_list = ast.literal_eval(source_files_raw)
+                except (ValueError, SyntaxError):
+                    # Fallback to treating as single item
+                    file_list = [source_files_raw.strip("[]'\"")]
+            else:
+                # Newline-separated format
+                file_list = source_files_raw.split("\n")
+
+            for f in file_list:
+                if f and f.endswith((".md", ".jinja")):
+                    # Extract filename for Azure blob paths
+                    filename = f.split("/")[-1] if "/" in f else f
+                    source_files.append(filename)
+
+        if not source_files:
+            logger.error(
+                "No template files found in original templates",
+                source_path=source_path,
+                original_templates_revision=original_templates_revision,
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=f"No template files found in {original_templates_revision} directory",
+            )
+
+        # Get destination path for new revision
+        dest_path = await fs.get_prompt_template_path(final_revision_id)
+
+        # Copy each template file
+        copied_files = []
+        failed_files = []
+
+        for filename in source_files:
+            try:
+                # Read from source
+                content = await fs.read_file(file_name=filename, file_path=source_path)
+
+                # Write to destination
+                await fs.write_file(
+                    contents=content,
+                    file_name=filename,
+                    file_path=dest_path,
+                )
+
+                copied_files.append(filename)
+
+            except Exception as e:
+                logger.debug(
+                    "Failed to copy template file",
+                    filename=filename,
+                    error=str(e),
+                )
+                failed_files.append(filename)
+
+        # Check if any files were successfully copied
+        if not copied_files:
+            raise HTTPException(
+                status_code=500, detail="Failed to copy any template files"
+            )
+
+        logger.debug(
+            "Successfully created revision",
+            revision_id=final_revision_id,
+            copied_files_count=len(copied_files),
+        )
+
+        response_data = {
+            "revision_id": final_revision_id,
+            "message": "Revision created successfully",
+            "template_count": len(copied_files),
+            "copied_files": copied_files,
+        }
+
+        # Include failed files info if any
+        if failed_files:
+            response_data["partial_success"] = True
+            response_data["failed_files"] = failed_files
+            response_data["warning"] = (
+                f"Failed to copy {len(failed_files)} template files"
+            )
+
+        return response_data
+
+    except HTTPException:
+        # Re-raise HTTP exceptions (these are intentional)
+        raise
+    except Exception as e:
+        logger.error(
+            "Unexpected error creating revision",
+            requested_id=create_request.revision_id,
+            error=str(e),
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500, detail="Internal server error while creating revision"
+        )
