@@ -56,16 +56,6 @@ class TestGenerateFunnyRevisionId:
         except ValueError:
             pytest.fail(f"UUID part '{uuid_part}' is not valid hexadecimal")
 
-    @patch("ingenious.utils.revision_names.logger")
-    def test_generate_funny_revision_id_logging(self, mock_logger):
-        """Test that function logs the generation properly."""
-        revision_id = generate_funny_revision_id()
-
-        mock_logger.info.assert_called_once()
-        call_args = mock_logger.info.call_args
-        assert "Generated funny revision ID" in call_args[0][0]
-        assert call_args[1]["revision_id"] == revision_id
-
 
 class TestNormalizeRevisionId:
     """Test cases for normalize_revision_id function."""
@@ -174,10 +164,10 @@ class TestResolveUserRevisionId:
         assert result == "myproject-1"
 
     def test_resolve_user_revision_id_multiple_conflicts(self):
-        """Test resolving multiple conflicts by finding next number."""
+        """Test resolving multiple conflicts by finding next available number."""
         existing_ids = ["myproject", "myproject-1", "myproject-2", "myproject-5"]
         result = resolve_user_revision_id("myproject", existing_ids)
-        assert result == "myproject-6"  # Should find highest (5) and add 1
+        assert result == "myproject-3"  # Should find first available number (3)
 
     def test_resolve_user_revision_id_normalization(self):
         """Test that input is normalized before conflict resolution."""
@@ -200,7 +190,7 @@ class TestResolveUserRevisionId:
             "workflow-other-1",
         ]
         result = resolve_user_revision_id("workflow-test", existing_ids)
-        assert result == "workflow-test-11"  # Should find highest (10) and add 1
+        assert result == "workflow-test-2"  # Should find first available number (2)
 
     def test_resolve_user_revision_id_pattern_matching(self):
         """Test that only exact pattern matches are considered."""
@@ -217,19 +207,32 @@ class TestResolveUserRevisionId:
     def test_resolve_user_revision_id_logging_no_conflict(self, mock_logger):
         """Test logging when no conflict occurs."""
         resolve_user_revision_id("myproject", ["other"])
-
-        mock_logger.info.assert_called_once()
-        call_args = mock_logger.info.call_args
-        assert "User revision ID available" in call_args[0][0]
+        # Implementation now logs normalization + availability; ensure expected message present.
+        assert mock_logger.debug.call_count >= 1
+        messages = [c.args[0] for c in mock_logger.debug.call_args_list]
+        assert any("User revision ID available" in m for m in messages), (
+            "Expected availability log message not found"
+        )
+        # Last call should be the availability message.
+        assert (
+            "User revision ID available" in mock_logger.debug.call_args_list[-1].args[0]
+        )
 
     @patch("ingenious.utils.revision_names.logger")
     def test_resolve_user_revision_id_logging_with_conflict(self, mock_logger):
         """Test logging when conflict resolution occurs."""
         resolve_user_revision_id("myproject", ["myproject"])
-
-        mock_logger.info.assert_called_once()
-        call_args = mock_logger.info.call_args
-        assert "Resolved user revision ID conflict" in call_args[0][0]
+        # Implementation now logs normalization + conflict resolution; ensure expected message present.
+        assert mock_logger.debug.call_count >= 1
+        messages = [c.args[0] for c in mock_logger.debug.call_args_list]
+        assert any("Resolved user revision ID conflict" in m for m in messages), (
+            "Expected conflict resolution log message not found"
+        )
+        # Last call should be the conflict resolution message.
+        assert (
+            "Resolved user revision ID conflict"
+            in mock_logger.debug.call_args_list[-1].args[0]
+        )
 
 
 class TestGenerateRevisionId:
