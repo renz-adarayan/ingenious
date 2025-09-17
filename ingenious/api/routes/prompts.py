@@ -419,7 +419,7 @@ async def create_revision(
                 status_code=500, detail="Failed to copy any template files"
             )
 
-        logger.info(
+        logger.debug(
             "Successfully created revision",
             revision_id=final_revision_id,
             copied_files_count=len(copied_files),
