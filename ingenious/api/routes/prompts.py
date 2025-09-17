@@ -350,27 +350,18 @@ async def create_revision(
                 detail="Original template directory not found or inaccessible",
             )
 
-        # Parse source files - handle both newline-separated and Python list string formats
+        # Filter source files to get only template files
         source_files = []
         if source_files_raw:
-            file_list = []
-            if source_files_raw.startswith("[") and source_files_raw.endswith("]"):
-                # Python list string format: "['file1.jinja', 'file2.jinja']"
-                try:
-                    import ast
-
-                    file_list = ast.literal_eval(source_files_raw)
-                except (ValueError, SyntaxError):
-                    # Fallback to treating as single item
-                    file_list = [source_files_raw.strip("[]'\"")]
-            else:
-                # Newline-separated format
-                file_list = source_files_raw.split("\n")
-
+            # Handle string response from list_files (newline-separated)
+            file_list = source_files_raw.split("\n") if source_files_raw else []
             for f in file_list:
                 if f and f.endswith((".md", ".jinja")):
-                    # Extract filename for Azure blob paths
-                    filename = f.split("/")[-1] if "/" in f else f
+                    # For Azure Blob Storage, extract just the filename
+                    if "/" in f:
+                        filename = f.split("/")[-1]
+                    else:
+                        filename = f
                     source_files.append(filename)
 
         if not source_files:
