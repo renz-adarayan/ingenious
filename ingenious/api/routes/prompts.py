@@ -302,7 +302,7 @@ async def create_revision(
     fs: FileStorage = Depends(ingen_deps.get_file_storage_revisions),
 ) -> Dict[str, Any]:
     """
-    Create a new revision with templates copied from quickstart-1.
+    Create a new revision with templates copied from the configured original templates.
 
     If no revision_id is provided, generates a funny name like 'cosmic-ninja-a1b2c3d4'.
     If revision_id is provided but conflicts, appends incremental numbers like 'my-workflow-1'.
@@ -331,14 +331,17 @@ async def create_revision(
             create_request.revision_id, list(existing_revision_ids)
         )
 
-        # Get source templates from quickstart-1
-        source_path = await fs.get_prompt_template_path("quickstart-1")
+        # Get source templates from configured original templates revision
+        config = ingen_deps.get_config()
+        original_templates_revision = config.file_storage.revisions.original_templates
+        source_path = await fs.get_prompt_template_path(original_templates_revision)
         try:
             source_files_raw = await fs.list_files(file_path=source_path)
         except Exception as e:
             logger.error(
-                "Failed to access quickstart-1 directory",
+                "Failed to access original templates directory",
                 source_path=source_path,
+                original_templates_revision=original_templates_revision,
                 error=str(e),
                 exc_info=True,
             )
@@ -372,12 +375,13 @@ async def create_revision(
 
         if not source_files:
             logger.error(
-                "No template files found in quickstart-1",
+                "No template files found in original templates",
                 source_path=source_path,
+                original_templates_revision=original_templates_revision,
             )
             raise HTTPException(
                 status_code=500,
-                detail="No template files found in quickstart-1 directory",
+                detail=f"No template files found in {original_templates_revision} directory",
             )
 
         # Get destination path for new revision

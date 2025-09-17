@@ -355,6 +355,10 @@ class FileStorageContainerSettings(BaseModel):
         AuthenticationMethod.DEFAULT_CREDENTIAL,
         description="Authentication method for Azure: 'default_credential', 'msi', etc.",
     )
+    original_templates: str = Field(
+        "quickstart-1",
+        description="Default revision ID to use as source when creating new revisions",
+    )
 
 
 class FileStorageSettings(BaseModel):
