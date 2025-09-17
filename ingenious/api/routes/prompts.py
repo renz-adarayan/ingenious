@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBasicCredentials
@@ -32,18 +32,14 @@ async def _get_existing_revision_ids(fs: FileStorage) -> Set[str]:
         base_template_path = await fs.get_prompt_template_path()
 
         # List all directories in the templates/prompts folder
-        revisions_raw = await fs.list_directories(file_path=base_template_path)
+        revision_dirs: List[str] = await fs.list_directories(
+            file_path=base_template_path
+        )
 
-        # Since list_directories now returns directory names directly,
-        # we can add them directly to the set
-        revision_ids = set()
-        if revisions_raw:
-            # Split by newlines and add non-empty items directly
-            for item in revisions_raw.split("\n"):
-                if item.strip():  # Use strip() to handle any whitespace
-                    revision_ids.add(item.strip())
+        # Convert list to set
+        revision_ids = set(revision_dirs) if revision_dirs else set()
 
-        # If no revisions found via path parsing, try to discover from workflows
+        # If no revisions found via directory listing, try to discover from workflows
         if not revision_ids:
             config = ingen_deps.get_config()
             workflows = discover_workflows(

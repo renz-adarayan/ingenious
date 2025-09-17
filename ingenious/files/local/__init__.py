@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import List
 
 import aiofiles  # type: ignore
 
@@ -84,7 +85,7 @@ class local_FileStorageRepository(IFileStorage):
             print(error_msg)
             return error_msg
 
-    async def list_directories(self, file_path: str) -> str:
+    async def list_directories(self, file_path: str) -> List[str]:
         """
         List directories in a local directory.
 
@@ -93,15 +94,14 @@ class local_FileStorageRepository(IFileStorage):
         try:
             path = Path(self.fs_config.path) / Path(file_path)
             if not path.exists():
-                return ""
-            
+                return []
+
             directories = [d.name for d in path.iterdir() if d.is_dir()]
-            # Return newline-separated format for consistency
-            return "\n".join(directories) if directories else ""
+            return directories
         except Exception as e:
             error_msg = f"Failed to list directories in {path}: {e}"
             print(error_msg)
-            return error_msg
+            return []
 
     async def check_if_file_exists(self, file_path: str, file_name: str) -> bool:
         """
