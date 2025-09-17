@@ -244,9 +244,9 @@ async def diagnostic(
             await ingen_deps.get_file_storage_revisions().get_prompt_template_path()
         )
 
-        data_dir = Path(await ingen_deps.get_file_storage_data().get_base_path()) / Path(
-            await ingen_deps.get_file_storage_data().get_data_path()
-        )
+        data_dir = Path(
+            await ingen_deps.get_file_storage_data().get_base_path()
+        ) / Path(await ingen_deps.get_file_storage_data().get_data_path())
 
         output_dir = Path(
             await ingen_deps.get_file_storage_revisions().get_base_path()
